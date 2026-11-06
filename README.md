@@ -26,6 +26,10 @@ and debug overlays. Model weights and datasets are supplied separately.
 > [!IMPORTANT]
 > This repository is part of [***OpenADS***](https://openads-project.github.io/), the *Open Automated Driving Systems* project. *OpenADS* and its modules have been initiated and are currently being maintained by the [**Institute for Automotive Engineering (ika) at RWTH Aachen University**](https://www.ika.rwth-aachen.de/de/).
 
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/23dacb8b-69d6-4f94-aff6-03ba409d075d" alt="Image instance segmentation with tracked masks and labels" />
+</p>
+
 ## 🚀 Quick Start
 
 Run the demo with Triton, recorded camera images, and a segmentation overlay viewer:
