@@ -88,7 +88,62 @@ include the `jazzy-ika` tracing fork.
 
 Postprocessing thresholds and `debug.*` settings support runtime changes through
 `ros2 param set`. Model, camera, and tracker settings are read-only after startup.
-Numeric parameters expose valid ranges through `ros2 param describe`.
+`ros2 param describe` exposes parameter descriptions and declared ranges.
+
+**Diagnostics**
+
+`/diagnostics` (`diagnostic_msgs/msg/DiagnosticArray`) is remapped with
+`diagnostics_topic`. Reports contain one `<FQN>: health` and optional
+`<FQN>: <resolved_topic> topic status` entries. `diagnostic_updater.use_fqn: true`
+includes the namespace (for example `/perception/image_instance_segmentation: health`)
+without renaming topics. Hardware ID is `none`.
+
+Health combines the same cycle's topic results and the checks below, with precedence
+ERROR > STALE > WARN > OK. Check summaries appear alphabetically, followed by details.
+
+| Check | Assessment | Detail fields per camera |
+| --- | --- | --- |
+| `inputs` | ERROR for receive timeout or acquisition age outside bounds; STALE before the first image until timeout | `received_since_start`, `receive_age_s`, `acquisition_age_s` |
+| `data_integrity` | ERROR for zero dimensions, empty data/frame ID, or invalid/zero timestamp; STALE before input | `invalid_metadata_since_start` |
+| `processing` | ERROR for exceptions, non-finite candidates or stalled output; WARN for slow processing; STALE pending backend/first result | `backend_ready`, `completed_since_start`, `failed_since_start`, `dropped_busy_since_start`, `dropped_not_ready_since_start`, `in_flight`, `output_age_s`, `duration_s`, `peak_duration_since_report_s` |
+| `initialization` | Present after an initialization failure: ERROR until recovery, then OK | `error` |
+| `topic.<camera>.<output>` | Enabled topic helper's frequency and timestamp assessment | Frequency, event-window and timestamp statistics |
+
+Camera details use `<check>.<camera>.<field>`, such as
+`processing.front_center.duration_s`. Errors and duration peaks remain visible
+through the next assessment and recover with valid frames. Empty detections are
+valid; busy/unavailable-backend drops are counted separately from successful output.
+
+All settings below have the prefix `diagnostic_updater.` and are read-only.
+
+| Parameter suffix | Default |
+| --- | --- |
+| `period` | `1.0` s |
+| `use_fqn` | `true` (required) |
+| `inputs.timeout` | `2.0` s |
+| `inputs.min_age` / `inputs.max_age` | `-0.05` / `1.0` s |
+| `processing.timeout` | `max(5.0, 2 * prediction.triton_client_timeout_s)` s |
+| `processing.warn_duration` | `0.1` s, input callback to publication |
+| `<camera>.<output>.nominal_frequency` | `0.0` Hz, disabling that topic check |
+| `<camera>.<output>.min_frequency` / `max_frequency` | `0.8` / `1.2` times nominal frequency |
+
+`<output>` is `input`, `class_mask`, `instance_mask` or `detections`; overlays are
+demand-driven. Rate checks use five reports and the ROS clock. Output timestamp
+limits add `processing.timeout` to `inputs.max_age`. Topic details under
+`topic.<camera>.<output>` are `frequency_hz`, `{min,max,target}_frequency_hz`,
+`events_in_window`, `events_since_start`, `window_s`, `{min,max}_delay_s`,
+`{min,max}_allowed_delay_s` and `{late,early,zero_stamp}_reports_since_start`
+(counts of reports observing timestamp faults).
+
+Acquisition age uses ROS time (`use_sim_time` for bags); watchdogs use steady time.
+Reports pause with `/clock` and assess elapsed time on resume. Backward time jumps
+affect rate windows until they refill. Transport decoding failures appear as receive
+timeouts. Backend readiness comes from initialization/inference responses, without
+an independent probe. Device/time-sync state and mask-pixel validity are not assessed.
+Application QoS is BEST_EFFORT/VOLATILE; RELIABLE subscribers do not match the outputs.
+
+The `karl-platform` group `/perception/image_instance_segmentation` retains stopped
+nodes with a five-second timeout. Grouping is monitoring-only; reactions are separate.
 
 ```mermaid
 flowchart LR
@@ -167,6 +222,7 @@ flowchart LR
 
 | Argument | Default | Description |
 | --- | --- | --- |
+| `diagnostics_topic` | `"/diagnostics"` | diagnostics topic remap |
 | `image_topic` | `"~/image"` | input image topic remap |
 | `class_mask_topic` | `"~/segmentation/class_mask"` | semantic mask topic remap |
 | `instance_mask_topic` | `"~/segmentation/instance_mask"` | instance mask topic remap |

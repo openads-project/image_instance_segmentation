@@ -44,6 +44,37 @@ class ITracker {
   virtual void reset() = 0;
 };
 
+ImageInstanceSegmentation::CameraRuntime::CameraRuntime() = default;
+ImageInstanceSegmentation::CameraRuntime::~CameraRuntime() = default;
+
+ImageInstanceSegmentation::CameraRuntime::CameraRuntime(CameraRuntime&& other) noexcept
+    : config(std::move(other.config)),
+      image_subscriber(std::move(other.image_subscriber)),
+      class_mask_publisher(std::move(other.class_mask_publisher)),
+      instance_mask_publisher(std::move(other.instance_mask_publisher)),
+      detections_publisher(std::move(other.detections_publisher)),
+      class_overlay_publisher(std::move(other.class_overlay_publisher)),
+      instance_overlay_publisher(std::move(other.instance_overlay_publisher)),
+      callback_group(std::move(other.callback_group)),
+      tracker(std::move(other.tracker)),
+      in_flight(other.in_flight.load()) {}
+
+ImageInstanceSegmentation::CameraRuntime& ImageInstanceSegmentation::CameraRuntime::operator=(CameraRuntime&& other) noexcept {
+  if (this != &other) {
+    config = std::move(other.config);
+    image_subscriber = std::move(other.image_subscriber);
+    class_mask_publisher = std::move(other.class_mask_publisher);
+    instance_mask_publisher = std::move(other.instance_mask_publisher);
+    detections_publisher = std::move(other.detections_publisher);
+    class_overlay_publisher = std::move(other.class_overlay_publisher);
+    instance_overlay_publisher = std::move(other.instance_overlay_publisher);
+    callback_group = std::move(other.callback_group);
+    tracker = std::move(other.tracker);
+    in_flight.store(other.in_flight.load());
+  }
+  return *this;
+}
+
 // Fixed-size pool of persistent worker threads. Replaces spawning a new
 // std::thread per frame, which under sustained camera frame rates repeatedly
 // pays thread create/teardown cost for no benefit. Each camera has its own
@@ -726,12 +757,22 @@ ImageInstanceSegmentation::ImageInstanceSegmentation(const rclcpp::NodeOptions& 
   validateParameters();
   initializeModel();
   setupCameras();
+  setupDiagnostics();
   parameters_callback_handle_ = add_on_set_parameters_callback(
       [this](const std::vector<rclcpp::Parameter>& parameters) { return parametersCallback(parameters); });
   parameters_post_callback_handle_ =
       add_post_set_parameters_callback([this](const std::vector<rclcpp::Parameter>& parameters) { applyParameters(parameters); });
   const std::size_t worker_count = static_cast<std::size_t>(std::max(1, max_in_flight_per_camera_)) * camera_configs_.size();
   thread_pool_ = std::make_unique<ThreadPool>(worker_count);
+  for (const auto& config : camera_configs_) {
+    thread_pool_->enqueue([this, name = config.name] {
+      try {
+        initializeModelForCamera(name);
+      } catch (const std::exception& error) {
+        if (!stopping_.load()) recordProcessingFailure(name, error.what());
+      }
+    });
+  }
 }
 
 ImageInstanceSegmentation::~ImageInstanceSegmentation() {
@@ -745,49 +786,8 @@ ImageInstanceSegmentation::~ImageInstanceSegmentation() {
   for (auto& entry : cameras_) {
     entry.second.image_subscriber.shutdown();
   }
+  diagnostic_updater_.reset();
   thread_pool_.reset();
-}
-
-template <typename T>
-void ImageInstanceSegmentation::declareAndLoadParameter(const std::string& name,
-                                                        T& value,
-                                                        const std::string& description,
-                                                        bool add_to_auto_reconfigurable_params,
-                                                        bool is_required,
-                                                        bool read_only,
-                                                        const std::optional<double>& from_value,
-                                                        const std::optional<double>& to_value,
-                                                        const std::optional<double>& step_value,
-                                                        const std::string& additional_constraints) {
-  if (add_to_auto_reconfigurable_params && read_only) {
-    throw std::logic_error("A read-only parameter cannot be reconfigurable: " + name);
-  }
-  if (is_required && get_node_parameters_interface()->get_parameter_overrides().count(name) == 0) {
-    throw std::runtime_error("Missing required parameter: " + name);
-  }
-  rcl_interfaces::msg::ParameterDescriptor descriptor;
-  descriptor.description = description;
-  descriptor.additional_constraints = additional_constraints;
-  descriptor.read_only = read_only;
-  if (from_value && to_value) {
-    if constexpr (std::is_integral_v<T> && !std::is_same_v<T, bool>) {
-      rcl_interfaces::msg::IntegerRange range;
-      range.from_value = static_cast<int64_t>(*from_value);
-      range.to_value = static_cast<int64_t>(*to_value);
-      range.step = static_cast<uint64_t>(step_value.value_or(1.0));
-      descriptor.integer_range = {range};
-    } else if constexpr (std::is_floating_point_v<T>) {
-      rcl_interfaces::msg::FloatingPointRange range;
-      range.from_value = *from_value;
-      range.to_value = *to_value;
-      range.step = step_value.value_or(0.0);
-      descriptor.floating_point_range = {range};
-    }
-  }
-  value = declare_parameter<T>(name, value, descriptor);
-  if (add_to_auto_reconfigurable_params) {
-    auto_reconfigurable_params_.emplace(name, [&value](const rclcpp::Parameter& parameter) { value = parameter.get_value<T>(); });
-  }
 }
 
 rcl_interfaces::msg::SetParametersResult ImageInstanceSegmentation::parametersCallback(
@@ -994,21 +994,24 @@ void ImageInstanceSegmentation::validateParameters() const {
 }
 
 void ImageInstanceSegmentation::initializeModel() {
-  // Pre-populate both maps for every configured camera up front, while still
+  // Pre-populate camera state and client maps before workers start, while still
   // single-threaded, so that later per-camera lookups (from worker threads)
   // only ever call .at() on existing keys and never trigger a concurrent
   // insertion/rehash.
   for (const auto& config : camera_configs_) {
+    camera_health_.try_emplace(config.name);
     model_mutexes_.try_emplace(config.name);
     triton_interfaces_.try_emplace(config.name, nullptr);
-  }
-  for (const auto& config : camera_configs_) {
-    initializeModelForCamera(config.name);
   }
 }
 
 void ImageInstanceSegmentation::initializeModelForCamera(const std::string& camera_name) {
   std::lock_guard<std::mutex> lock(model_mutexes_.at(camera_name));
+  auto& state = camera_health_.at(camera_name);
+  {
+    std::lock_guard<std::mutex> state_lock(state.mutex);
+    state.backend_ready = false;
+  }
   constexpr auto kRetryDelay = std::chrono::seconds(1);
   while (!stopping_.load() && rclcpp::ok(get_node_base_interface()->get_context())) {
     try {
@@ -1028,6 +1031,11 @@ void ImageInstanceSegmentation::initializeModelForCamera(const std::string& came
       interface->initInOutputs(output_shape_overrides, std::map<std::string, std::vector<int64_t>>{
                                                            {input_tensor_name_, {1, 3, input_height_, input_width_}}});
       triton_interfaces_.at(camera_name) = std::move(interface);
+      {
+        std::lock_guard<std::mutex> state_lock(state.mutex);
+        state.backend_ready = true;
+        state.initialization_error.clear();
+      }
       RCLCPP_INFO(get_logger(),
                   "Camera '%s': connected to Triton model '%s:%s' at '%s' "
                   "using input dtype '%s' and output dtype '%s'",
@@ -1035,11 +1043,21 @@ void ImageInstanceSegmentation::initializeModelForCamera(const std::string& came
                   tensorDataTypeName(input_tensor_data_type_).c_str(), tensorDataTypeName(output_tensor_data_type_).c_str());
       return;
     } catch (const std::exception& e) {
+      {
+        std::lock_guard<std::mutex> state_lock(state.mutex);
+        state.initialization_failed = true;
+        state.initialization_error = e.what();
+      }
       RCLCPP_WARN(get_logger(),
                   "Camera '%s': failed to initialize Triton model '%s:%s' at "
                   "'%s': %s. Retrying in 1s.",
                   camera_name.c_str(), model_name_.c_str(), model_version_.c_str(), server_url_.c_str(), e.what());
-      rclcpp::sleep_for(kRetryDelay);
+      // Component unloading also interrupts retries while the ROS context stays alive.
+      const auto retry_at = std::chrono::steady_clock::now() + kRetryDelay;
+      while (!stopping_.load() && std::chrono::steady_clock::now() < retry_at &&
+             rclcpp::ok(get_node_base_interface()->get_context())) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+      }
     }
   }
   throw std::runtime_error("Shutdown requested while waiting for Triton connection");
@@ -1197,12 +1215,38 @@ std::map<std::string, std::vector<int64_t>> ImageInstanceSegmentation::probeOutp
 void ImageInstanceSegmentation::imageCallback(const sensor_msgs::msg::Image::ConstSharedPtr& msg,
                                               const std::string& camera_name) {
   const auto input_received_at = std::chrono::steady_clock::now();
+  auto& state = camera_health_.at(camera_name);
+  bool backend_ready = false;
+  const bool valid_stamp = msg->header.stamp.sec >= 0 && msg->header.stamp.nanosec < 1000000000u;
+  {
+    std::lock_guard<std::mutex> state_lock(state.mutex);
+    backend_ready = state.backend_ready;
+    if (!backend_ready) ++state.dropped_not_ready;
+    if (state.received == 0) state.first_receive = input_received_at;
+    state.last_receive = input_received_at;
+    state.input_stamp = valid_stamp ? rclcpp::Time(msg->header.stamp, get_clock()->get_clock_type())
+                                    : rclcpp::Time(0, 0, get_clock()->get_clock_type());
+    ++state.received;
+    state.input_valid = msg->width > 0 && msg->height > 0 && !msg->data.empty() && !msg->header.frame_id.empty() && valid_stamp &&
+                        state.input_stamp.nanoseconds() > 0;
+    if (!state.input_valid) {
+      ++state.invalid;
+      state.invalid_in_cycle = true;
+    }
+  }
+  if (auto& task = state.topics.at("input").task; task && valid_stamp) task->tick(msg->header.stamp);
+  // Receive health includes all frames, but initialization must not queue stale images.
+  if (!backend_ready) return;
   std::lock_guard<std::mutex> admission_lock(admission_mutex_);
   auto& runtime = cameras_.at(camera_name);
   if (stopping_.load()) return;
   int in_flight = runtime.in_flight.load();
   do {
-    if (in_flight >= max_in_flight_per_camera_) return;
+    if (in_flight >= max_in_flight_per_camera_) {
+      std::lock_guard<std::mutex> state_lock(state.mutex);
+      ++state.dropped;
+      return;
+    }
   } while (!runtime.in_flight.compare_exchange_weak(in_flight, in_flight + 1));
 
   try {
@@ -1216,6 +1260,7 @@ void ImageInstanceSegmentation::imageCallback(const sensor_msgs::msg::Image::Con
         // msg owns the storage behind raw BGR views throughout processing.
         processImage(msg->header, rawImageToBgr(*msg), camera_name, input_received_at);
       } catch (const std::exception& error) {
+        recordProcessingFailure(camera_name, error.what());
         RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 5000, "Camera '%s': processing failed: %s", camera_name.c_str(),
                              error.what());
       }
@@ -1250,6 +1295,7 @@ void ImageInstanceSegmentation::processImage(const std_msgs::msg::Header& header
     inference_started_at = std::chrono::steady_clock::now();
     interface.infer();
   } catch (const std::exception& error) {
+    recordProcessingFailure(camera_name, error.what());
     lock.unlock();
     RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 5000, "Camera '%s': Triton request failed: %s. Reinitializing.",
                          camera_name.c_str(), error.what());
@@ -1260,11 +1306,29 @@ void ImageInstanceSegmentation::processImage(const std_msgs::msg::Header& header
   std::shared_lock<std::shared_mutex> parameters_lock(runtime_parameters_mutex_);
   const double score_threshold =
       tracker_config_.enabled ? std::min(confidence_threshold_, tracker_config_.low_confidence_threshold) : confidence_threshold_;
-  auto detections = decodeDetections(interface, bgr_image.cols, bgr_image.rows, letterbox, score_threshold);
+  bool invalid_result = false;
+  auto detections = decodeDetections(interface, bgr_image.cols, bgr_image.rows, letterbox, score_threshold, invalid_result);
+  if (invalid_result) recordProcessingFailure(camera_name, "Non-finite detection candidates in model output");
   if (camera.tracker) detections = camera.tracker->update(detections);
   const auto masks = reconstructMasks(interface, detections, bgr_image.cols, bgr_image.rows, letterbox);
   // Keep publication in the same critical section as inference/tracking.
   publishResults(camera, header, bgr_image, detections, masks);
+  auto& state = camera_health_.at(camera_name);
+  for (const auto* key : {"class_mask", "instance_mask", "detections"}) {
+    if (auto& task = state.topics.at(key).task; task && header.stamp.sec >= 0 && header.stamp.nanosec < 1000000000u)
+      task->tick(header.stamp);
+  }
+  {
+    std::lock_guard<std::mutex> state_lock(state.mutex);
+    const auto finished_at = std::chrono::steady_clock::now();
+    state.duration_s = std::chrono::duration<double>(finished_at - input_received_at).count();
+    state.peak_duration_s = std::max(state.peak_duration_s, state.duration_s);
+    state.processing_failed = invalid_result;
+    if (!invalid_result) {
+      state.last_success = finished_at;
+      ++state.completed;
+    }
+  }
   if (print_timing_) {
     const auto finished_at = std::chrono::steady_clock::now();
     RCLCPP_INFO(get_logger(),
@@ -1281,15 +1345,17 @@ std::vector<Detection> ImageInstanceSegmentation::decodeDetections(triton_cpp::T
                                                                    int image_width,
                                                                    int image_height,
                                                                    const LetterboxInfo& letterbox,
-                                                                   double score_threshold) {
+                                                                   double score_threshold,
+                                                                   bool& invalid_result) {
   switch (architecture_) {
     case ModelArchitecture::Yolo:
-      return applyNms(decodeYoloDetections(triton_interface, image_width, image_height, letterbox, score_threshold));
+      return applyNms(
+          decodeYoloDetections(triton_interface, image_width, image_height, letterbox, score_threshold, invalid_result));
     case ModelArchitecture::Yolo26:
       // YOLO26 end-to-end exports already select their detections without NMS.
-      return decodeYoloDetections(triton_interface, image_width, image_height, letterbox, score_threshold);
+      return decodeYoloDetections(triton_interface, image_width, image_height, letterbox, score_threshold, invalid_result);
     case ModelArchitecture::RfDetr:
-      return applyNms(decodeRfDetrDetections(triton_interface, image_width, image_height, score_threshold));
+      return applyNms(decodeRfDetrDetections(triton_interface, image_width, image_height, score_threshold, invalid_result));
   }
   return {};
 }
@@ -1298,7 +1364,8 @@ std::vector<Detection> ImageInstanceSegmentation::decodeYoloDetections(triton_cp
                                                                        int image_width,
                                                                        int image_height,
                                                                        const LetterboxInfo& letterbox,
-                                                                       double score_threshold) {
+                                                                       double score_threshold,
+                                                                       bool& invalid_result) {
   const bool yolo26 = architecture_ == ModelArchitecture::Yolo26;
   const auto runtime_shape = triton_interface.getOutputShape(yolo_detections_output_tensor_name_);
   if (!((runtime_shape.size() == 3 && runtime_shape[0] == 1) || runtime_shape.size() == 2)) {
@@ -1341,17 +1408,22 @@ std::vector<Detection> ImageInstanceSegmentation::decodeYoloDetections(triton_cp
       if (yolo26) {
         best_score = value_at(4, anchor);
         const float class_id = value_at(5, anchor);
-        if (!std::isfinite(class_id) || class_id < 0 || class_id >= num_classes || std::floor(class_id) != class_id) continue;
+        if (!std::isfinite(class_id) || class_id < 0 || class_id >= num_classes || std::floor(class_id) != class_id) {
+          invalid_result = true;
+          continue;
+        }
         best_class = static_cast<int>(class_id);
       } else {
         for (int cls = 0; cls < num_classes; ++cls) {
           const float score = value_at(4 + cls, anchor);
+          if (!std::isfinite(score)) invalid_result = true;
           if (score > best_score) {
             best_score = score;
             best_class = cls;
           }
         }
       }
+      if (!std::isfinite(best_score)) invalid_result = true;
       if (!std::isfinite(best_score) || best_score < static_cast<float>(score_threshold)) {
         continue;
       }
@@ -1360,7 +1432,10 @@ std::vector<Detection> ImageInstanceSegmentation::decodeYoloDetections(triton_cp
       const float box_b = value_at(1, anchor);
       const float box_c = value_at(2, anchor);
       const float box_d = value_at(3, anchor);
-      if (!std::isfinite(box_a) || !std::isfinite(box_b) || !std::isfinite(box_c) || !std::isfinite(box_d)) continue;
+      if (!std::isfinite(box_a) || !std::isfinite(box_b) || !std::isfinite(box_c) || !std::isfinite(box_d)) {
+        invalid_result = true;
+        continue;
+      }
       const cv::Rect2f model_box = yolo26 ? cv::Rect2f(box_a, box_b, box_c - box_a, box_d - box_b)
                                           : cv::Rect2f(box_a - box_c * 0.5f, box_b - box_d * 0.5f, box_c, box_d);
       cv::Rect2f original_box((model_box.x - letterbox.pad_x) / letterbox.scale,
@@ -1383,7 +1458,10 @@ std::vector<Detection> ImageInstanceSegmentation::decodeYoloDetections(triton_cp
         finite_coefficients = finite_coefficients && std::isfinite(coefficient);
         detection.mask_coefficients[static_cast<std::size_t>(i)] = coefficient;
       }
-      if (!finite_coefficients) continue;
+      if (!finite_coefficients) {
+        invalid_result = true;
+        continue;
+      }
       detections.push_back(std::move(detection));
     }
   };
@@ -1404,7 +1482,8 @@ std::vector<Detection> ImageInstanceSegmentation::decodeYoloDetections(triton_cp
 std::vector<Detection> ImageInstanceSegmentation::decodeRfDetrDetections(triton_cpp::TritonInterface& triton_interface,
                                                                          int image_width,
                                                                          int image_height,
-                                                                         double score_threshold) {
+                                                                         double score_threshold,
+                                                                         bool& invalid_result) {
   const auto boxes_shape = triton_interface.getOutputShape(rfdetr_boxes_output_tensor_name_);
   const auto logits_shape = triton_interface.getOutputShape(rfdetr_logits_output_tensor_name_);
   const int64_t num_classes = static_cast<int64_t>(class_names_.size());
@@ -1429,11 +1508,16 @@ std::vector<Detection> ImageInstanceSegmentation::decodeRfDetrDetections(triton_
       const float cy = static_cast<float>(boxes(0, query, 1)) * image_height;
       const float width = static_cast<float>(boxes(0, query, 2)) * image_width;
       const float height = static_cast<float>(boxes(0, query, 3)) * image_height;
-      if (!std::isfinite(cx) || !std::isfinite(cy) || !std::isfinite(width) || !std::isfinite(height)) continue;
+      if (!std::isfinite(cx) || !std::isfinite(cy) || !std::isfinite(width) || !std::isfinite(height)) {
+        invalid_result = true;
+        continue;
+      }
       const cv::Rect2f box = clipBox({cx - width * 0.5f, cy - height * 0.5f, width, height}, image_width, image_height);
       if (box.area() <= 1.0f) continue;
       for (int64_t cls = 0; cls < num_classes; ++cls) {
-        const float score = 1.0f / (1.0f + std::exp(-static_cast<float>(logits(0, query, cls))));
+        const float logit = static_cast<float>(logits(0, query, cls));
+        if (!std::isfinite(logit)) invalid_result = true;
+        const float score = 1.0f / (1.0f + std::exp(-logit));
         if (!std::isfinite(score) || score < static_cast<float>(score_threshold)) continue;
         Detection detection;
         detection.box = box;

@@ -7,6 +7,8 @@ endif()
 
 find_package(ament_cmake REQUIRED)
 find_package(OpenCV REQUIRED COMPONENTS core dnn imgproc video)
+find_package(diagnostic_msgs REQUIRED)
+find_package(diagnostic_updater REQUIRED)
 find_package(image_transport REQUIRED)
 find_package(rcl_interfaces REQUIRED)
 find_package(rclcpp REQUIRED)
@@ -18,6 +20,7 @@ find_package(vision_msgs REQUIRED)
 
 add_library(${PROJECT_NAME}_lib SHARED
   src/ImageInstanceSegmentation.cpp
+  src/Diagnostics.cpp
 )
 
 target_include_directories(${PROJECT_NAME}_lib PUBLIC
@@ -28,6 +31,8 @@ target_include_directories(${PROJECT_NAME}_lib PUBLIC
 target_compile_features(${PROJECT_NAME}_lib PUBLIC cxx_std_17)
 
 ament_target_dependencies(${PROJECT_NAME}_lib
+  diagnostic_msgs
+  diagnostic_updater
   image_transport
   rcl_interfaces
   rclcpp
