@@ -1,0 +1,59 @@
+/**/*:
+  ros__parameters:
+    prediction.triton_server_url: "triton-server:8001"
+    prediction.model_name: "rfdetr-seg-small"
+    prediction.model_version: "1"
+    prediction.triton_client_timeout_s: 2.0
+    prediction.use_shm: false
+    prediction.max_in_flight_per_camera: 1
+
+    # yolo (YOLOv8/v11) and yolo26 letterbox the image and read model.yolo.* tensors.
+    # rfdetr stretches the image to the input size and reads model.rfdetr.* tensors.
+    model.architecture: "rfdetr"
+    model.input_width: 1280
+    model.input_height: 720
+    model.input_tensor_name: "input"
+    model.input_tensor_data_type: "fp16"
+    model.output_tensor_data_type: "fp16"
+    model.rfdetr.boxes_output_tensor_name: "dets"
+    model.rfdetr.logits_output_tensor_name: "labels"
+    model.rfdetr.masks_output_tensor_name: "masks"
+
+    # model.class_names is the contiguous tensor-channel order.
+    # model.class_ids are the semantic IDs written into class_mask; 0 is background.
+    model.class_names:
+      - PEDESTRIAN
+      - BICYCLE
+      - MOTORCYCLE
+      - CAR
+      - UTILITY
+      - BUS
+      - ANIMAL
+      - VRU
+      - MICRO
+      - TRAFFIC_LIGHT
+      - TRAFFIC_SIGN
+    model.class_ids: [1, 2, 3, 4, 5, 7, 8, 12, 13, 20, 29]
+
+    postprocessing.confidence_threshold: 0.25
+    postprocessing.mask_threshold: 0.5
+    postprocessing.nms_iou_threshold: 0.45
+
+    tracking.enabled: true
+    tracking.backend: "bytetrack"
+    tracking.high_confidence_threshold: 0.5
+    tracking.low_confidence_threshold: 0.1
+    tracking.new_track_confidence_threshold: 0.6
+    tracking.match_iou_threshold: 0.3
+    tracking.max_lost_frames: 30
+    tracking.min_box_area_px: 25.0
+
+    debug.publish_overlay: false
+    debug.print_timing: false
+    debug.overlay_alpha: 0.45
+    debug.overlay_draw_boxes: true
+
+    cameras: [camera]
+    camera.camera.image_topic: "~/image"
+    camera.camera.transport: "raw"
+    camera.camera.output_prefix: "~"

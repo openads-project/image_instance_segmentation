@@ -1,0 +1,11 @@
+services:
+  image-instance-segmentation:
+    image: ${FAT_IMAGE:-image_instance_segmentation:latest}
+    command:
+      - ros2
+      - launch
+      - image_instance_segmentation
+      - image_instance_segmentation.launch.py
+      - log_level:=info
+      - use_sim_time:=false
+      - ros_tracing:=true

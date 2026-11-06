@@ -1,0 +1,103 @@
+name: docker-ros
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  docker-ros:
+    strategy:
+      matrix:
+        include:
+          - platform: amd64
+            runner: ubuntu-24.04
+          - platform: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - id: slug
+        uses: gacts/github-slug@v1
+        with:
+          to-slug: ${{ github.head_ref || github.ref_name }}
+      - uses: ika-rwth-aachen/docker-ros@main
+        with:
+          platform: ${{ matrix.platform }}
+          target: dev,run
+          enable-singlearch-push: true
+          base-image: rwthika/ros2-triton:jazzy
+          rmw-implementation: rmw_zenoh_cpp
+          command: ros2 launch image_instance_segmentation image_instance_segmentation.launch.py
+          enable-recursive-vcs-import: "false"
+          enable-industrial-ci: true
+          enable-slim: "true"
+          # Retain optional runtime binaries and plugin dependencies.
+          additional-slim-build-args: >-
+            --compose-file ../docker/slim-compose.yml
+            --compose-workdir ..
+            --target-compose-svc image-instance-segmentation
+            --dep-exclude-compose-svc-all
+            --include-bin /opt/tritonclient/lib/libgrpcclient.so
+            --include-bin /opt/ros/jazzy/lib/libcompressed_image_transport.so
+            --include-bin /opt/ros/jazzy/lib/librcl_interfaces__rosidl_generator_py.so
+            --include-exe lttng
+            --include-exe lttng-sessiond
+            --include-path /var/run
+            --include-path /usr/lib/python3.12
+            --include-path /usr/lib/python3
+            --include-path /usr/local/lib/python3.12/dist-packages
+            --include-exe cut
+            --include-shell
+          label-maintainer: Institute for Automotive Engineering (ika), RWTH Aachen University <opensource@ika.rwth-aachen.de>
+          label-authors: Lukas Ostendorf <lukas.ostendorf@rwth-aachen.de>
+          cmake-args: -DCMAKE_BUILD_TYPE=Release
+        env:
+          FAT_IMAGE: ghcr.io/${{ github.repository }}:${{ github.ref_type == 'tag' && github.ref_name || github.ref == format('refs/heads/{0}', github.event.repository.default_branch) && 'latest' || format('latest_{0}_ci', steps.slug.outputs.slug) }}-${{ matrix.platform }}
+          TARGET_CMAKE_ARGS: -DCMAKE_EXPORT_COMPILE_COMMANDS=1
+
+  publish-manifests:
+    needs: docker-ros
+    runs-on: ubuntu-24.04
+    steps:
+      - id: slug
+        uses: gacts/github-slug@v1
+        with:
+          to-slug: ${{ github.head_ref || github.ref_name }}
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+      - uses: docker/setup-buildx-action@v3
+      - name: Publish multi-arch manifests
+        shell: bash
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          REF_SLUG: ${{ steps.slug.outputs.slug }}
+        run: |
+          image="ghcr.io/${GITHUB_REPOSITORY,,}"
+          tag="latest"
+          postfix=""
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            tag="${GITHUB_REF_NAME}"
+          elif [[ "${GITHUB_REF}" != "refs/heads/${DEFAULT_BRANCH}" ]]; then
+            postfix="_${REF_SLUG}_ci"
+          fi
+          for variant in "" "-dev" "-slim"; do
+            target="${image}:${tag}${variant}${postfix}"
+            docker buildx imagetools create --tag "${target}" \
+              "${target}-amd64" "${target}-arm64"
+          done

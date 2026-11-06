@@ -1,0 +1,39 @@
+openadservice:
+  name: image-instance-segmentation
+  image: ghcr.io/openads-project/image_instance_segmentation:v1.1.0
+  env:
+    # --- name ------
+    NAMESPACE: /
+    NAME: image_instance_segmentation
+    # --- other -----
+    IMAGE_TOPIC: ~/image
+    CLASS_MASK_TOPIC: ~/segmentation/class_mask
+    INSTANCE_MASK_TOPIC: ~/segmentation/instance_mask
+    DETECTIONS_TOPIC: ~/segmentation/detections
+    CLASS_OVERLAY_TOPIC: ~/debug/overlay/class
+    INSTANCE_OVERLAY_TOPIC: ~/debug/overlay/instance
+    LOG_LEVEL: info
+    USE_SIM_TIME: false
+    PARAMS: /docker-ros/ws/install/image_instance_segmentation/share/image_instance_segmentation/config/params.yml
+    ROS_TRACING: false
+    TRITON_SERVER_URL: triton-server:8001
+  args:
+  - /bin/bash
+  - -ic
+  - |
+    ros2 launch image_instance_segmentation image_instance_segmentation.launch.py \
+      namespace:=${NAMESPACE} \
+      name:=${NAME} \
+      log_level:=${LOG_LEVEL} \
+      use_sim_time:=${USE_SIM_TIME} \
+      params:=${PARAMS} \
+      ros_tracing:=${ROS_TRACING} \
+      triton_server_url:=${TRITON_SERVER_URL} \
+      image_topic:=${IMAGE_TOPIC} \
+      class_mask_topic:=${CLASS_MASK_TOPIC} \
+      instance_mask_topic:=${INSTANCE_MASK_TOPIC} \
+      detections_topic:=${DETECTIONS_TOPIC} \
+      class_overlay_topic:=${CLASS_OVERLAY_TOPIC} \
+      instance_overlay_topic:=${INSTANCE_OVERLAY_TOPIC}
+  rosParamFileMountPath: /docker-ros/ws/install/image_instance_segmentation/share/image_instance_segmentation/config/params.yml
+  rosParamFileData: null

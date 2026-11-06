@@ -1,0 +1,112 @@
+name: image-segmentation-demo
+
+x-ros-environment: &ros_environment
+  RMW_IMPLEMENTATION: rmw_fastrtps_cpp
+  ROS_DOMAIN_ID: ${ROS_DOMAIN_ID:-42}
+
+services:
+  triton-server:
+    image: nvcr.io/nvidia/tritonserver:26.07-py3
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    ipc: shareable
+    shm_size: 1gb
+    volumes:
+      - type: image
+        source: ${MODEL_IMAGE:-ghcr.io/openads-project/image_instance_segmentation/model:v1.1.0}
+        target: /models
+        read_only: true
+        image:
+          subpath: models
+      - triton-cache:/tmp/trt_cache
+    command:
+      - tritonserver
+      - --model-repository=/models
+      - --allow-client-shm=true
+      - --model-control-mode=explicit
+      - --load-model=rfdetr-seg-small
+    healthcheck:
+      test: [CMD, curl, --fail, --silent, http://localhost:8000/v2/health/ready]
+      interval: 5s
+      timeout: 5s
+      start_period: 300s
+      retries: 60
+
+  image-instance-segmentation:
+    image: ${SEGMENTATION_IMAGE:-ghcr.io/openads-project/image_instance_segmentation:latest}
+    depends_on:
+      triton-server:
+        condition: service_healthy
+    ipc: service:triton-server
+    environment: *ros_environment
+    volumes:
+      - ./config/params.yml:/demo/params.yml:ro
+    command:
+      - ros2
+      - launch
+      - image_instance_segmentation
+      - image_instance_segmentation.launch.py
+      - params:=/demo/params.yml
+      - triton_server_url:=triton-server:8001
+      - use_sim_time:=true
+      - image_topic:=/demo/image
+      - class_mask_topic:=/demo/class_mask
+      - instance_mask_topic:=/demo/instance_mask
+      - detections_topic:=/demo/detections
+      - class_overlay_topic:=/demo/overlay/class
+      - instance_overlay_topic:=/demo/overlay/instance
+
+  bag-play:
+    image: ghcr.io/openads-project/monitoring:v1.0.0
+    depends_on:
+      image-instance-segmentation:
+        condition: service_started
+    ipc: service:triton-server
+    environment: *ros_environment
+    volumes:
+      - type: image
+        source: ${DATA_IMAGE:-ghcr.io/openads-project/openadstack/demo-data:basic_v1.0.0}
+        target: /bag
+        read_only: true
+        image:
+          subpath: data
+    command:
+      - ros2
+      - bag
+      - play
+      - /bag
+      - --clock
+      - "100"
+      - --loop
+      - --delay
+      - "3"
+      - --rate
+      - ${BAG_RATE:-1.0}
+      - --topics
+      - ${BAG_IMAGE_TOPIC:-/drivers/zed_camera/front_center/left/color/rect/image/compressed}
+      - --remap
+      - ${BAG_IMAGE_TOPIC:-/drivers/zed_camera/front_center/left/color/rect/image/compressed}:=/demo/image/compressed
+      - --disable-keyboard-controls
+
+  visualization:
+    image: ghcr.io/openads-project/monitoring:v1.0.0
+    depends_on:
+      image-instance-segmentation:
+        condition: service_started
+    ipc: service:triton-server
+    environment:
+      <<: *ros_environment
+      DISPLAY: ${DISPLAY:-:0}
+      QT_X11_NO_MITSHM: "1"
+    volumes:
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+      - ./visualization/open_image_view.py:/demo/open_image_view.py:ro
+    command: [python3, /demo/open_image_view.py]
+
+volumes:
+  triton-cache:
