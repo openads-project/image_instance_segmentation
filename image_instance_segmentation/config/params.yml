@@ -58,21 +58,21 @@
     camera.camera.transport: "raw"
     camera.camera.output_prefix: "~"
 
-    diagnostic_updater:
-      period: 1.0
-      # Prefix statuses with the fully qualified node name, including its namespace.
-      # Example: /perception/image_instance_segmentation: health. This does not rename topics.
-      use_fqn: true
-      inputs:
-        timeout: 2.0
-        min_age: -0.05
-        max_age: 1.0
-      processing:
-        # timeout defaults to max(5.0, 2 * prediction.triton_client_timeout_s).
-        warn_duration: 0.1
-      # Per-camera rate checks are optional; zero (the default) disables them.
-      # camera:
-      #   input:
-      #     nominal_frequency: 20.0
-      #     min_frequency: 16.0  # Derived from the nominal rate unless overridden.
-      #     max_frequency: 24.0
+    # diagnostic_updater:
+    #   period: 1.0
+    #   # Prefix statuses with the fully qualified node name, including its namespace.
+    #   # Example: /perception/image_instance_segmentation: health. This does not rename topics.
+    #   use_fqn: true
+    #   inputs:
+    #     timeout: 2.0
+    #     min_age: -0.05
+    #     max_age: 1.0
+    #   processing:
+    #     # timeout defaults to max(5.0, 2 * prediction.triton_client_timeout_s).
+    #     warn_duration: 0.1
+    #   # Per-camera rate checks are optional; zero (the default) disables them.
+    #   # camera:
+    #   #   input:
+    #   #     nominal_frequency: 20.0
+    #   #     min_frequency: 16.0  # Derived from the nominal rate unless overridden.
+    #   #     max_frequency: 24.0
