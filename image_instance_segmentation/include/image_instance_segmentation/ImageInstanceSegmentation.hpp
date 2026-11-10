@@ -17,14 +17,11 @@
 #include <mutex>
 #include <opencv2/core.hpp>
 #include <optional>
-#include <rcl_interfaces/msg/parameter_descriptor.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/image.hpp>
 #include <shared_mutex>
 #include <std_msgs/msg/header.hpp>
-#include <stdexcept>
 #include <string>
-#include <type_traits>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -377,47 +374,5 @@ class ImageInstanceSegmentation : public rclcpp::Node {
   // Destroy the updater timer before the tasks and snapshots it references.
   std::unique_ptr<diagnostic_updater::Updater> diagnostic_updater_;
 };
-
-template <typename T>
-void ImageInstanceSegmentation::declareAndLoadParameter(const std::string& name,
-                                                        T& value,
-                                                        const std::string& description,
-                                                        bool add_to_auto_reconfigurable_params,
-                                                        bool is_required,
-                                                        bool read_only,
-                                                        const std::optional<double>& from_value,
-                                                        const std::optional<double>& to_value,
-                                                        const std::optional<double>& step_value,
-                                                        const std::string& additional_constraints) {
-  if (add_to_auto_reconfigurable_params && read_only) {
-    throw std::logic_error("A read-only parameter cannot be reconfigurable: " + name);
-  }
-  if (is_required && get_node_parameters_interface()->get_parameter_overrides().count(name) == 0) {
-    throw std::runtime_error("Missing required parameter: " + name);
-  }
-  rcl_interfaces::msg::ParameterDescriptor descriptor;
-  descriptor.description = description;
-  descriptor.additional_constraints = additional_constraints;
-  descriptor.read_only = read_only;
-  if (from_value && to_value) {
-    if constexpr (std::is_integral_v<T> && !std::is_same_v<T, bool>) {
-      rcl_interfaces::msg::IntegerRange range;
-      range.from_value = static_cast<int64_t>(*from_value);
-      range.to_value = static_cast<int64_t>(*to_value);
-      range.step = static_cast<uint64_t>(step_value.value_or(1.0));
-      descriptor.integer_range = {range};
-    } else if constexpr (std::is_floating_point_v<T>) {
-      rcl_interfaces::msg::FloatingPointRange range;
-      range.from_value = *from_value;
-      range.to_value = *to_value;
-      range.step = step_value.value_or(0.0);
-      descriptor.floating_point_range = {range};
-    }
-  }
-  value = declare_parameter<T>(name, value, descriptor);
-  if (add_to_auto_reconfigurable_params) {
-    auto_reconfigurable_params_.emplace(name, [&value](const rclcpp::Parameter& parameter) { value = parameter.get_value<T>(); });
-  }
-}
 
 }  // namespace image_instance_segmentation
