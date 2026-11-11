@@ -17,6 +17,7 @@ from tracetools_launch.action import Trace
 def generate_launch_description():
     """Generate the image instance segmentation launch description."""
     remappable_topics = [
+        DeclareLaunchArgument("diagnostics_topic", default_value="/diagnostics", description="diagnostics topic remap"),
         DeclareLaunchArgument("image_topic", default_value="~/image", description="input image topic remap"),
         DeclareLaunchArgument(
             "class_mask_topic", default_value="~/segmentation/class_mask", description="semantic mask topic remap"

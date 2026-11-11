@@ -7,6 +7,7 @@ services:
       NAMESPACE: /
       NAME: image_instance_segmentation
       # --- other -----
+      DIAGNOSTICS_TOPIC: /diagnostics
       IMAGE_TOPIC: ~/image
       CLASS_MASK_TOPIC: ~/segmentation/class_mask
       INSTANCE_MASK_TOPIC: ~/segmentation/instance_mask
@@ -30,6 +31,7 @@ services:
           params:=$${PARAMS} \
           ros_tracing:=$${ROS_TRACING} \
           triton_server_url:=$${TRITON_SERVER_URL} \
+          diagnostics_topic:=$${DIAGNOSTICS_TOPIC} \
           image_topic:=$${IMAGE_TOPIC} \
           class_mask_topic:=$${CLASS_MASK_TOPIC} \
           instance_mask_topic:=$${INSTANCE_MASK_TOPIC} \

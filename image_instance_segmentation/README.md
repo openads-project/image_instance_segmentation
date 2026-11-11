@@ -2,93 +2,13 @@
 
 Image instance segmentation inference node backed by Triton
 
-Configure the node with the [parameter file](config/params.yml).
-
 ## Nodes
 
 ### `image_instance_segmentation`
 
-**Cameras and outputs**
+Image instance segmentation inference node backed by Triton
 
-List camera names in `cameras` and configure each under `camera.<name>`:
-
-| Parameter | Meaning |
-| --- | --- |
-| `camera.<name>.image_topic` | Base image topic |
-| `camera.<name>.transport` | `raw` or `compressed`; omit `/compressed` from the base topic |
-| `camera.<name>.output_prefix` | Prefix for segmentation and overlay outputs |
-
-The supplied parameter file configures one camera with raw transport, enables
-tracking, and selects RF-DETR-Seg decoding.
-
-For the default camera, launch arguments remap the input and all output topics:
-
-```bash
-ros2 launch image_instance_segmentation image_instance_segmentation.launch.py \
-  image_topic:=/camera/image_rect detections_topic:=/perception/detections
-```
-
-For multiple cameras, set `cameras: [left, right]` and configure each
-`camera.<name>` entry. Their default inputs are `~/<name>/image` and outputs
-are under `~/<name>/segmentation/`.
-
-Outputs preserve the input image dimensions, timestamp, and frame ID.
-Subscriptions use sensor-data QoS. Class masks contain `model.class_ids`;
-zero is background. Instance masks contain per-frame IDs or per-camera track IDs.
-`Detection2D.id` contains the track ID when tracking is enabled. Track IDs can be
-reused after a track ends.
-
-In the topic tables, `config.image_topic` is the configured input and `joinTopic`
-places outputs under the camera's prefix. Parameter names `image_topic`,
-`transport`, and `output_prefix` are per-camera suffixes.
-
-**Triton model**
-
-Set `prediction.triton_server_url`, `prediction.model_name`, and
-`prediction.model_version` for your model, and select its output decoding with
-`model.architecture`. Tensor names (under `model.yolo` or `model.rfdetr`) and
-FP32/FP16 precision are configurable. The input is always `[1, 3, H, W]` RGB
-normalized to `[0, 1]`.
-
-| `model.architecture` | Resize | Outputs |
-| --- | --- | --- |
-| `yolo` (YOLOv8/v11) | Letterbox | Detections `cx, cy, w, h, class scores..., mask coefficients...` and mask prototypes |
-| `yolo26` | Letterbox | Detections `x1, y1, x2, y2, confidence, class_id, mask coefficients...` and mask prototypes |
-| `rfdetr` (RF-DETR-Seg) | Stretch | Boxes `[1, queries, 4]` (normalized `cx, cy, w, h`), class logits `[1, queries, classes(+1)]`, mask logits `[1, queries, h, w]` |
-
-YOLO detections are `[1, channels, anchors]` or `[1, anchors, channels]` and
-prototypes `[1, mask_channels, mask_height, mask_width]`. RF-DETR yields one
-detection per query and class above the confidence threshold. For models that
-perform additional resizing and normalization inside the graph, set the node
-input size to the model's exported input resolution.
-
-Output dimensions must stay fixed for the configured input size. The node
-resolves dynamic tensor metadata with an inference request during startup.
-`model.class_names` follows model-output class order; `model.class_ids` contains
-the corresponding semantic mask IDs in `1..65535`.
-
-The `triton_server_url` launch argument sets the endpoint, defaults to
-`triton-server:8001`, and takes precedence over the YAML value.
-Shared memory (`prediction.use_shm`) requires a shared POSIX IPC namespace and
-Triton client shared-memory access.
-
-**Tracking and throughput**
-
-Tracking uses a separate ByteTrack tracker per camera, configured under
-`tracking`. YOLOv8/v11 and RF-DETR detections use per-class NMS; YOLO26 uses
-model selection.
-Cameras run concurrently with one Triton client each. Busy cameras drop frames
-at the admission limit. Set `prediction.max_in_flight_per_camera: 1` for low
-latency; tracking enforces this limit to preserve frame order.
-
-Enable `debug.publish_overlay` for overlays and `debug.print_timing` for
-processing times.
-Use `ros_tracing:=true` to enable OpenADS dual-session tracing. Service images
-include the `jazzy-ika` tracing fork.
-
-Postprocessing thresholds and `debug.*` settings support runtime changes through
-`ros2 param set`. Model, camera, and tracker settings are read-only after startup.
-Numeric parameters expose valid ranges through `ros2 param describe`.
+See [configuration and diagnostics](../docs/IMPLEMENTATION.md).
 
 ```mermaid
 flowchart LR
@@ -167,6 +87,7 @@ flowchart LR
 
 | Argument | Default | Description |
 | --- | --- | --- |
+| `diagnostics_topic` | `"/diagnostics"` | diagnostics topic remap |
 | `image_topic` | `"~/image"` | input image topic remap |
 | `class_mask_topic` | `"~/segmentation/class_mask"` | semantic mask topic remap |
 | `instance_mask_topic` | `"~/segmentation/instance_mask"` | instance mask topic remap |

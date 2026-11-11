@@ -8,6 +8,8 @@
 #include <atomic>
 #include <chrono>
 #include <cstdint>
+#include <diagnostic_updater/diagnostic_updater.hpp>
+#include <diagnostic_updater/publisher.hpp>
 #include <functional>
 #include <image_transport/image_transport.hpp>
 #include <map>
@@ -100,6 +102,49 @@ class ImageInstanceSegmentation : public rclcpp::Node {
   ~ImageInstanceSegmentation() override;
 
  private:
+  struct TopicHealth {
+    double nominal_frequency = 0.0;
+    double min_frequency = 0.0;
+    double max_frequency = 0.0;
+    diagnostic_updater::DiagnosticStatusWrapper result;
+    std::unique_ptr<diagnostic_updater::TopicDiagnostic> task;
+  };
+
+  struct CameraHealthSnapshot {
+    std::chrono::steady_clock::time_point first_receive{};
+    std::chrono::steady_clock::time_point last_receive{};
+    std::chrono::steady_clock::time_point last_success{};
+    rclcpp::Time input_stamp{0, 0, RCL_ROS_TIME};
+    std::uint64_t received = 0;
+    std::uint64_t dropped = 0;
+    std::uint64_t dropped_not_ready = 0;
+    std::uint64_t completed = 0;
+    std::uint64_t failed = 0;
+    std::uint64_t invalid = 0;
+    bool backend_ready = false;
+    bool initialization_failed = false;
+    bool input_valid = true;
+    bool invalid_in_cycle = false;
+    bool processing_failed = false;
+    bool failure_in_cycle = false;
+    double duration_s = 0.0;
+    double peak_duration_s = 0.0;
+    std::string initialization_error;
+    std::string processing_error;
+  };
+
+  struct CameraHealth : CameraHealthSnapshot {
+    std::mutex mutex;
+    std::map<std::string, TopicHealth> topics;
+  };
+
+  /** @brief Configure topic tasks and the single overall health assessment. */
+  void setupDiagnostics();
+  /** @brief Summarize topic results and camera/backend snapshots once per cycle. */
+  void health(diagnostic_updater::DiagnosticStatusWrapper& status);
+  /** @brief Record a failed frame without publishing diagnostics from a worker. */
+  void recordProcessingFailure(const std::string& camera_name, const std::string& message);
+
   struct CameraRuntime {
     CameraConfig config;
     image_transport::Subscriber image_subscriber;
@@ -113,7 +158,9 @@ class ImageInstanceSegmentation : public rclcpp::Node {
     std::atomic<int> in_flight{0};
 
     /** @brief Create empty runtime state with no in-flight frames. */
-    CameraRuntime() = default;
+    CameraRuntime();
+    /** @brief Release the tracker in the implementation that defines it. */
+    ~CameraRuntime();
     /** @brief Prevent copying subscriptions, tracker ownership, and admission
      * counters. */
     CameraRuntime(const CameraRuntime&) = delete;
@@ -122,34 +169,9 @@ class ImageInstanceSegmentation : public rclcpp::Node {
 
     /** @brief Transfer camera resources and snapshot the atomic in-flight
      * count. */
-    CameraRuntime(CameraRuntime&& other) noexcept
-        : config(std::move(other.config)),
-          image_subscriber(std::move(other.image_subscriber)),
-          class_mask_publisher(std::move(other.class_mask_publisher)),
-          instance_mask_publisher(std::move(other.instance_mask_publisher)),
-          detections_publisher(std::move(other.detections_publisher)),
-          class_overlay_publisher(std::move(other.class_overlay_publisher)),
-          instance_overlay_publisher(std::move(other.instance_overlay_publisher)),
-          callback_group(std::move(other.callback_group)),
-          tracker(std::move(other.tracker)),
-          in_flight(other.in_flight.load()) {}
-
+    CameraRuntime(CameraRuntime&& other) noexcept;
     /** @brief Move camera resources and copy the atomic in-flight count. */
-    CameraRuntime& operator=(CameraRuntime&& other) noexcept {
-      if (this != &other) {
-        config = std::move(other.config);
-        image_subscriber = std::move(other.image_subscriber);
-        class_mask_publisher = std::move(other.class_mask_publisher);
-        instance_mask_publisher = std::move(other.instance_mask_publisher);
-        detections_publisher = std::move(other.detections_publisher);
-        class_overlay_publisher = std::move(other.class_overlay_publisher);
-        instance_overlay_publisher = std::move(other.instance_overlay_publisher);
-        callback_group = std::move(other.callback_group);
-        tracker = std::move(other.tracker);
-        in_flight.store(other.in_flight.load());
-      }
-      return *this;
-    }
+    CameraRuntime& operator=(CameraRuntime&& other) noexcept;
   };
 
   /** @brief Declare a parameter with its current default and load any
@@ -186,8 +208,7 @@ class ImageInstanceSegmentation : public rclcpp::Node {
   /** @brief Reject invalid dimensions, class mappings, thresholds, and camera
    * settings. */
   void validateParameters() const;
-  /** @brief Create the reusable Triton client and inference buffers for each
-   * camera. */
+  /** @brief Allocate stable per-camera state before starting model workers. */
   void initializeModel();
   /** @brief Initialize one camera client, resolving tensor shapes before
    * allocating buffers. */
@@ -219,20 +240,23 @@ class ImageInstanceSegmentation : public rclcpp::Node {
                                           int image_width,
                                           int image_height,
                                           const LetterboxInfo& letterbox,
-                                          double score_threshold);
+                                          double score_threshold,
+                                          bool& invalid_result);
   /** @brief Decode validated YOLO tensor layouts into original-image boxes and
    * mask coefficients. */
   std::vector<Detection> decodeYoloDetections(triton_cpp::TritonInterface& triton_interface,
                                               int image_width,
                                               int image_height,
                                               const LetterboxInfo& letterbox,
-                                              double score_threshold);
+                                              double score_threshold,
+                                              bool& invalid_result);
   /** @brief Decode RF-DETR boxes and per-class logits into one detection per
    * query and class above the threshold. */
   std::vector<Detection> decodeRfDetrDetections(triton_cpp::TritonInterface& triton_interface,
                                                 int image_width,
                                                 int image_height,
-                                                double score_threshold);
+                                                double score_threshold,
+                                                bool& invalid_result);
   /** @brief Keep confidence-ordered detections using class-specific IoU
    * suppression. */
   std::vector<Detection> applyNms(std::vector<Detection> detections) const;
@@ -278,6 +302,16 @@ class ImageInstanceSegmentation : public rclcpp::Node {
   /** @brief Join a configured topic prefix and suffix with exactly one
    * separator. */
   static std::string joinTopic(const std::string& prefix, const std::string& suffix);
+
+  std::map<std::string, CameraHealth> camera_health_;
+  std::chrono::steady_clock::time_point diagnostics_started_at_ = std::chrono::steady_clock::now();
+  double diagnostic_period_s_ = 1.0;
+  bool diagnostic_use_fqn_ = true;
+  double input_timeout_s_ = 2.0;
+  double input_max_age_s_ = 1.0;
+  double input_min_age_s_ = -0.05;
+  double processing_timeout_s_ = 5.0;
+  double processing_warn_duration_s_ = 0.1;
 
   std::string server_url_ = "triton-server:8001";
   std::string model_name_ = "rfdetr-seg-small";
@@ -333,12 +367,12 @@ class ImageInstanceSegmentation : public rclcpp::Node {
   rclcpp::node_interfaces::OnSetParametersCallbackHandle::SharedPtr parameters_callback_handle_;
   rclcpp::node_interfaces::PostSetParametersCallbackHandle::SharedPtr parameters_post_callback_handle_;
 
-  // Declared last so it is destroyed first: its destructor joins all worker
-  // threads before the members above (cameras_, triton_interfaces_, ...) that
-  // in-flight tasks reference are torn down.
+  // Workers are joined before camera state and Triton clients are released.
   std::mutex admission_mutex_;
   std::atomic<bool> stopping_{false};
   std::unique_ptr<ThreadPool> thread_pool_;
+  // Destroy the updater timer before the tasks and snapshots it references.
+  std::unique_ptr<diagnostic_updater::Updater> diagnostic_updater_;
 };
 
 }  // namespace image_instance_segmentation
