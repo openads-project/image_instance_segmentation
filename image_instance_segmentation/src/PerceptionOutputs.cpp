@@ -43,7 +43,7 @@ cv::Rect sourceRoi(const cv::Rect2f& box, const cv::Size& size) {
 
 void ImageInstanceSegmentation::configurePerceptionClasses() {
   using Classification = perception_msgs::msg::ObjectClassification;
-  using RoadUser = perception_msgs::msg::ISCACTR;
+  using RoadUser = perception_msgs::msg::HEXAMOTION;
   const std::map<std::string, PerceptionClass> classes{
       {"PEDESTRIAN", {RoadUser::MODEL_ID, Classification::PEDESTRIAN}},
       {"BICYCLE", {RoadUser::MODEL_ID, Classification::BICYCLE}},
@@ -103,7 +103,7 @@ void ImageInstanceSegmentation::publishPerceptionObjects(const CameraRuntime& ca
       initializeState(object, model_id);
       object.state.header = header;
       object.state.sensor_id.push_back(static_cast<std::uint64_t>(camera.config.sensor_id));
-      if (model_id == perception_msgs::msg::ISCACTR::MODEL_ID) {
+      if (model_id == perception_msgs::msg::HEXAMOTION::MODEL_ID) {
         perception_msgs::msg::ObjectClassification road_class;
         road_class.type = classification.classification;
         road_class.probability = detection.score;
@@ -135,7 +135,7 @@ void ImageInstanceSegmentation::publishPerceptionObjects(const CameraRuntime& ca
     }
     publisher->publish(std::move(objects));
   };
-  publish(camera.road_users_publisher, perception_msgs::msg::ISCACTR::MODEL_ID);
+  publish(camera.road_users_publisher, perception_msgs::msg::HEXAMOTION::MODEL_ID);
   publish(camera.traffic_lights_publisher, perception_msgs::msg::TRAFFICLIGHT::MODEL_ID);
   publish(camera.traffic_signs_publisher, perception_msgs::msg::TRAFFICSIGN::MODEL_ID);
 }

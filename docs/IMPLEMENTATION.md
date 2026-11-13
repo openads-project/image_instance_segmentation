@@ -51,7 +51,7 @@ perception.publish_traffic_signs: true
 
 Topics are `perception/road_users`, `perception/traffic_lights` and
 `perception/traffic_signs` under each camera's output prefix. They carry
-`perception_msgs/msg/ObjectList` with `ISCACTR`, `TRAFFICLIGHT` and `TRAFFICSIGN`
+`perception_msgs/msg/ObjectList` with `HEXAMOTION`, `TRAFFICLIGHT` and `TRAFFICSIGN`
 states respectively. Metric components remain unmeasured; light state, sign type
 and road-user light states remain unknown.
 

@@ -38,7 +38,7 @@ flowchart LR
 | `joinTopic(config.output_prefix, "segmentation/class_mask")` | `sensor_msgs/msg/Image` | `mono16` semantic class IDs; zero is background |
 | `joinTopic(config.output_prefix, "segmentation/instance_mask")` | `sensor_msgs/msg/Image` | `mono16` instance IDs; track IDs when tracking is enabled; zero is background |
 | `joinTopic(config.output_prefix, "segmentation/detections")` | `vision_msgs/msg/Detection2DArray` | Pixel-coordinate boxes, class names, confidence scores, and optional track IDs |
-| `joinTopic(config.output_prefix, "perception/road_users")` | `perception_msgs/msg/ObjectList` | Optional image-only road users (`ISCACTR`) with source camera observations |
+| `joinTopic(config.output_prefix, "perception/road_users")` | `perception_msgs/msg/ObjectList` | Optional image-only road users (`HEXAMOTION`) with source camera observations |
 | `joinTopic(config.output_prefix, "perception/traffic_lights")` | `perception_msgs/msg/ObjectList` | Optional image-only traffic lights (`TRAFFICLIGHT`) with source camera observations |
 | `joinTopic(config.output_prefix, "perception/traffic_signs")` | `perception_msgs/msg/ObjectList` | Optional image-only traffic signs (`TRAFFICSIGN`) with source camera observations |
 | `joinTopic(config.output_prefix, "debug/overlay/class")` | `sensor_msgs/msg/Image` | Optional `bgr8` overlay colored by class |
