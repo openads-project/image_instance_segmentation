@@ -37,7 +37,7 @@ reused after a track ends.
 
 In the topic tables, `config.image_topic` is the configured input and `joinTopic`
 places outputs under the camera's prefix. Parameter names `image_topic`,
-`transport`, and `output_prefix` are per-camera suffixes.
+`sensor_id`, `transport`, and `output_prefix` are per-camera suffixes.
 
 ## Perception objects
 
@@ -58,7 +58,7 @@ and road-user light states remain unknown.
 The standard `model.class_names` select the category and road-user classification,
 independently of `model.class_ids`. Unmapped names remain in segmentation outputs.
 Object IDs persist for a tracked object's lifetime and are not recycled when
-legacy mask IDs are reused. Without tracking, each published detection gets a
+mask IDs are reused. Without tracking, each published detection gets a
 fresh ID. IDs are scoped to a camera stream and node lifetime.
 
 Observations retain source coordinates and headers. `perception.include_crops`

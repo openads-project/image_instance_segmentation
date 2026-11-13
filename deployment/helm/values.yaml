@@ -1,6 +1,6 @@
 openadservice:
   name: image-instance-segmentation
-  image: ghcr.io/openads-project/image_instance_segmentation:v1.1.0
+  image: ghcr.io/openads-project/image_instance_segmentation:v1.2.0
   env:
     # --- name ------
     NAMESPACE: /

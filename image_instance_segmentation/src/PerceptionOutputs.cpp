@@ -9,6 +9,7 @@
 #include <map>
 #include <perception_msgs_utils/object_access.hpp>
 #include <sensor_msgs/image_encodings.hpp>
+#include <stdexcept>
 
 namespace image_instance_segmentation {
 namespace {
@@ -80,6 +81,8 @@ void ImageInstanceSegmentation::publishPerceptionObjects(const CameraRuntime& ca
                                                          const std::vector<Detection>& detections,
                                                          const std::vector<InstanceMask>& masks) const {
   using namespace perception_msgs::object_access;
+  // Image observations require a valid source camera header.
+  if (header.frame_id.empty() || header.stamp.sec < 0 || header.stamp.nanosec >= 1000000000u) return;
   const auto publish = [&](const rclcpp::Publisher<perception_msgs::msg::ObjectList>::SharedPtr& publisher,
                            std::uint8_t model_id) {
     if (!publisher || (publisher->get_subscription_count() == 0 && publisher->get_intra_process_subscription_count() == 0))
