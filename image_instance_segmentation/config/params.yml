@@ -54,10 +54,7 @@
     perception.include_crops: true
     perception.include_masks: true
 
-    debug.publish_overlay: false
     debug.print_timing: false
-    debug.overlay_alpha: 0.45
-    debug.overlay_draw_boxes: true
 
     cameras: [camera]
     camera.camera.sensor_id: 1

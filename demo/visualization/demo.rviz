@@ -1,0 +1,86 @@
+Panels:
+  - Class: rviz_common/Displays
+    Name: Displays
+Visualization Manager:
+  Class: ""
+  Displays:
+    - Class: perception_msgs/ImageObservations
+      Enabled: true
+      Name: Road users
+      Topic:
+        Value: /demo/perception/road_users
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Best Effort
+      Image Source:
+        Value: Image topic
+        Image Topic: /demo/image
+        Transport: compressed
+        Synchronization: Synchronized
+        Tolerance [ms]: 5
+        Image Buffer: 60
+      Mask:
+        Value: true
+        Mode: Filled + contour
+        Alpha: 0.35
+      Label:
+        Value: true
+        Format: "{id} {class} {class_prob}"
+        Font Size: 14
+    - Class: perception_msgs/ImageObservations
+      Enabled: true
+      Name: Traffic signs
+      Topic:
+        Value: /demo/perception/traffic_signs
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Best Effort
+      Image Source:
+        Value: Crop mosaic
+      Mask:
+        Value: true
+        Mode: Contour
+      Color: Fixed
+      Label:
+        Value: true
+        Format: "{id} sign {exist}"
+    - Class: perception_msgs/ImageObservations
+      Enabled: true
+      Name: Traffic lights
+      Topic:
+        Value: /demo/perception/traffic_lights
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Best Effort
+      Image Source:
+        Value: Crop mosaic
+      Mask:
+        Value: true
+        Mode: Contour
+      Color: By object ID
+      Label:
+        Value: true
+        Format: "{id} light {exist}"
+  Global Options:
+    Fixed Frame: map
+  Views:
+    Current:
+      Class: rviz_default_plugins/Orbit
+      Distance: 15
+Window Geometry:
+  Displays:
+    collapsed: false
+  Road users:
+    collapsed: false
+  Traffic signs:
+    collapsed: false
+  Traffic lights:
+    collapsed: false
+  Hide Left Dock: false
+  Hide Right Dock: true
+  QMainWindow State: 000000ff00000000fd000000010000000000000638000003e8fc0200000001fc00000000000003e80000002c00fffffffc0100000002fb000000100044006900730070006c0061007900730100000000000001040000003a00fffffffc0000010a0000052e0000007a00fffffffc0200000002fb000000140052006f006100640020007500730065007200730100000000000002730000001300fffffffc000002790000016f0000001300fffffffc0100000002fb0000001a00540072006100660066006900630020007300690067006e0073010000010a000002940000003a00fffffffb0000001c00540072006100660066006900630020006c0069006700680074007301000003a4000002940000003a00ffffff00000002000003e800000004000000040000000800000008fc00000000
+  Width: 1600
+  Height: 1000

@@ -37,14 +37,6 @@ def generate_launch_description():
         DeclareLaunchArgument(
             "traffic_signs_topic", default_value="~/perception/traffic_signs", description="traffic-sign objects topic remap"
         ),
-        DeclareLaunchArgument(
-            "class_overlay_topic", default_value="~/debug/overlay/class", description="class overlay topic remap"
-        ),
-        DeclareLaunchArgument(
-            "instance_overlay_topic",
-            default_value="~/debug/overlay/instance",
-            description="instance overlay topic remap",
-        ),
     ]
     args = [
         DeclareLaunchArgument("name", default_value="image_instance_segmentation", description="node name"),

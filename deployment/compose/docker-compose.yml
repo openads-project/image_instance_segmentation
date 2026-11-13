@@ -15,8 +15,6 @@ services:
       ROAD_USERS_TOPIC: ~/perception/road_users
       TRAFFIC_LIGHTS_TOPIC: ~/perception/traffic_lights
       TRAFFIC_SIGNS_TOPIC: ~/perception/traffic_signs
-      CLASS_OVERLAY_TOPIC: ~/debug/overlay/class
-      INSTANCE_OVERLAY_TOPIC: ~/debug/overlay/instance
       LOG_LEVEL: ${LOG_LEVEL:-info}
       USE_SIM_TIME: ${USE_SIM_TIME:-false}
       PARAMS: /docker-ros/ws/install/image_instance_segmentation/share/image_instance_segmentation/config/params.yml
@@ -41,8 +39,6 @@ services:
           detections_topic:=$${DETECTIONS_TOPIC} \
           road_users_topic:=$${ROAD_USERS_TOPIC} \
           traffic_lights_topic:=$${TRAFFIC_LIGHTS_TOPIC} \
-          traffic_signs_topic:=$${TRAFFIC_SIGNS_TOPIC} \
-          class_overlay_topic:=$${CLASS_OVERLAY_TOPIC} \
-          instance_overlay_topic:=$${INSTANCE_OVERLAY_TOPIC}
+          traffic_signs_topic:=$${TRAFFIC_SIGNS_TOPIC}
     # volumes:
     #   - ./params.yml:/docker-ros/ws/install/image_instance_segmentation/share/image_instance_segmentation/config/params.yml

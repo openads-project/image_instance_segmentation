@@ -48,10 +48,14 @@
     tracking.max_lost_frames: 30
     tracking.min_box_area_px: 25.0
 
-    debug.publish_overlay: true
+    # Image-only object lists with boxes, masks, and crops, shown by the RViz demo view.
+    perception.publish_road_users: true
+    perception.publish_traffic_lights: true
+    perception.publish_traffic_signs: true
+    perception.include_crops: true
+    perception.include_masks: true
+
     debug.print_timing: false
-    debug.overlay_alpha: 0.45
-    debug.overlay_draw_boxes: true
 
     cameras: [camera]
     camera.camera.image_topic: "~/image"

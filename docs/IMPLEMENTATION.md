@@ -105,8 +105,10 @@ Cameras run concurrently with one Triton client each. Busy cameras drop frames
 at the admission limit. Set `prediction.max_in_flight_per_camera: 1` for low
 latency; tracking enforces this limit to preserve frame order.
 
-Enable `debug.publish_overlay` for overlays and `debug.print_timing` for
-processing times.
+Enable `debug.print_timing` for processing times. To inspect results, enable
+the `perception.publish_*` object lists and view their image observations with
+the `perception_msgs/ImageObservations` RViz display from
+[perception_interfaces](https://github.com/ika-rwth-aachen/perception_interfaces).
 Use `ros_tracing:=true` to enable OpenADS dual-session tracing. Service images
 include the `jazzy-ika` tracing fork.
 
@@ -151,8 +153,8 @@ All settings below have the prefix `diagnostic_updater.` and are read-only.
 | `<camera>.<output>.nominal_frequency` | `0.0` Hz, disabling that topic check |
 | `<camera>.<output>.min_frequency` / `max_frequency` | `0.8` / `1.2` times nominal frequency |
 
-`<output>` is `input`, `class_mask`, `instance_mask` or `detections`; overlays are
-demand-driven. Rate checks use five reports and the ROS clock. Output timestamp
+`<output>` is `input`, `class_mask`, `instance_mask` or `detections`; perception
+object lists are demand-driven. Rate checks use five reports and the ROS clock. Output timestamp
 limits add `processing.timeout` to `inputs.max_age`. Topic details under
 `topic.<camera>.<output>` are `frequency_hz`, `{min,max,target}_frequency_hz`,
 `events_in_window`, `events_since_start`, `window_s`, `{min,max}_delay_s`,

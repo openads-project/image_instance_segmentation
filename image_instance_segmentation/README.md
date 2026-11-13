@@ -20,8 +20,6 @@ flowchart LR
     NODE -->|"joinTopic(config.output_prefix, 'perception/road_users')"| P3:::hidden
     NODE -->|"joinTopic(config.output_prefix, 'perception/traffic_lights')"| P4:::hidden
     NODE -->|"joinTopic(config.output_prefix, 'perception/traffic_signs')"| P5:::hidden
-    NODE -->|"joinTopic(config.output_prefix, 'debug/overlay/class')"| P6:::hidden
-    NODE -->|"joinTopic(config.output_prefix, 'debug/overlay/instance')"| P7:::hidden
     classDef hidden display: none;
 ```
 
@@ -41,8 +39,6 @@ flowchart LR
 | `joinTopic(config.output_prefix, "perception/road_users")` | `perception_msgs/msg/ObjectList` | Optional image-only road users (`HEXAMOTION`) with source camera observations |
 | `joinTopic(config.output_prefix, "perception/traffic_lights")` | `perception_msgs/msg/ObjectList` | Optional image-only traffic lights (`TRAFFICLIGHT`) with source camera observations |
 | `joinTopic(config.output_prefix, "perception/traffic_signs")` | `perception_msgs/msg/ObjectList` | Optional image-only traffic signs (`TRAFFICSIGN`) with source camera observations |
-| `joinTopic(config.output_prefix, "debug/overlay/class")` | `sensor_msgs/msg/Image` | Optional `bgr8` overlay colored by class |
-| `joinTopic(config.output_prefix, "debug/overlay/instance")` | `sensor_msgs/msg/Image` | Optional `bgr8` overlay colored by instance or track |
 
 #### Parameters
 
@@ -83,10 +79,7 @@ flowchart LR
 | `perception.publish_traffic_signs` | `bool` | `false` | Publish image-only traffic-sign object lists |
 | `perception.include_crops` | `bool` | `true` | Include BGR image crops in perception objects |
 | `perception.include_masks` | `bool` | `true` | Include binary instance masks in perception objects |
-| `debug.publish_overlay` | `bool` | `false` | Publish overlay images |
 | `debug.print_timing` | `bool` | `false` | Log inference, postprocessing, and total processing times |
-| `debug.overlay_alpha` | `float` | `0.45` | Mask opacity in debug overlays |
-| `debug.overlay_draw_boxes` | `bool` | `true` | Draw boxes and labels in debug overlays |
 | `cameras` | `string[]` | `["camera"]` | Names of cameras to process |
 | `sensor_id` | `int` | `1` | Non-negative camera identifier in perception observations |
 | `image_topic` | `string` | `"~/image"` | Raw image base topic |
@@ -107,8 +100,6 @@ flowchart LR
 | `road_users_topic` | `"~/perception/road_users"` | road-user objects topic remap |
 | `traffic_lights_topic` | `"~/perception/traffic_lights"` | traffic-light objects topic remap |
 | `traffic_signs_topic` | `"~/perception/traffic_signs"` | traffic-sign objects topic remap |
-| `class_overlay_topic` | `"~/debug/overlay/class"` | class overlay topic remap |
-| `instance_overlay_topic` | `"~/debug/overlay/instance"` | instance overlay topic remap |
 | `name` | `"image_instance_segmentation"` | node name |
 | `namespace` | `""` | node namespace |
 | `params` | `os.path.join(
