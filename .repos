@@ -3,3 +3,7 @@ repositories:
     type: git
     url: https://github.com/openads-project/triton_cpp.git
     version: v1.2.1
+  perception_interfaces:
+    type: git
+    url: https://github.com/ika-rwth-aachen/perception_interfaces.git
+    version: 900b05f02fa3452a2ee1735eac79d9e7886329fd

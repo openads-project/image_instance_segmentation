@@ -48,12 +48,19 @@
     tracking.max_lost_frames: 30
     tracking.min_box_area_px: 25.0
 
+    perception.publish_road_users: false
+    perception.publish_traffic_lights: false
+    perception.publish_traffic_signs: false
+    perception.include_crops: true
+    perception.include_masks: true
+
     debug.publish_overlay: false
     debug.print_timing: false
     debug.overlay_alpha: 0.45
     debug.overlay_draw_boxes: true
 
     cameras: [camera]
+    camera.camera.sensor_id: 1
     camera.camera.image_topic: "~/image"
     camera.camera.transport: "raw"
     camera.camera.output_prefix: "~"

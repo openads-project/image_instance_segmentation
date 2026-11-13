@@ -10,9 +10,10 @@ List camera names in `cameras` and configure each under `camera.<name>`:
 
 | Parameter | Meaning |
 | --- | --- |
+| `camera.<name>.sensor_id` | Unique camera ID for perception observations; defaults to its 1-based position in `cameras` |
 | `camera.<name>.image_topic` | Base image topic |
 | `camera.<name>.transport` | `raw` or `compressed`; omit `/compressed` from the base topic |
-| `camera.<name>.output_prefix` | Prefix for segmentation and overlay outputs |
+| `camera.<name>.output_prefix` | Prefix for camera output topics |
 
 The supplied parameter file configures one camera with raw transport, enables
 tracking, and selects RF-DETR-Seg decoding.
@@ -37,6 +38,33 @@ reused after a track ends.
 In the topic tables, `config.image_topic` is the configured input and `joinTopic`
 places outputs under the camera's prefix. Parameter names `image_topic`,
 `transport`, and `output_prefix` are per-camera suffixes.
+
+## Perception objects
+
+Enable each object-list output independently at startup:
+
+```yaml
+perception.publish_road_users: true
+perception.publish_traffic_lights: true
+perception.publish_traffic_signs: true
+```
+
+Topics are `perception/road_users`, `perception/traffic_lights` and
+`perception/traffic_signs` under each camera's output prefix. They carry
+`perception_msgs/msg/ObjectList` with `ISCACTR`, `TRAFFICLIGHT` and `TRAFFICSIGN`
+states respectively. Metric components remain unmeasured; light state, sign type
+and road-user light states remain unknown.
+
+The standard `model.class_names` select the category and road-user classification,
+independently of `model.class_ids`. Unmapped names remain in segmentation outputs.
+Object IDs persist for a tracked object's lifetime and are not recycled when
+legacy mask IDs are reused. Without tracking, each published detection gets a
+fresh ID. IDs are scoped to a camera stream and node lifetime.
+
+Observations retain source coordinates and headers. `perception.include_crops`
+and `perception.include_masks` independently include BGR crops and binary `mono8`
+ROI masks. Pixels are prepared only for subscribed outputs; empty lists are
+published for processed frames without matching detections.
 
 ## Triton model
 

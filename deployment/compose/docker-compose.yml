@@ -12,6 +12,9 @@ services:
       CLASS_MASK_TOPIC: ~/segmentation/class_mask
       INSTANCE_MASK_TOPIC: ~/segmentation/instance_mask
       DETECTIONS_TOPIC: ~/segmentation/detections
+      ROAD_USERS_TOPIC: ~/perception/road_users
+      TRAFFIC_LIGHTS_TOPIC: ~/perception/traffic_lights
+      TRAFFIC_SIGNS_TOPIC: ~/perception/traffic_signs
       CLASS_OVERLAY_TOPIC: ~/debug/overlay/class
       INSTANCE_OVERLAY_TOPIC: ~/debug/overlay/instance
       LOG_LEVEL: ${LOG_LEVEL:-info}
@@ -36,6 +39,9 @@ services:
           class_mask_topic:=$${CLASS_MASK_TOPIC} \
           instance_mask_topic:=$${INSTANCE_MASK_TOPIC} \
           detections_topic:=$${DETECTIONS_TOPIC} \
+          road_users_topic:=$${ROAD_USERS_TOPIC} \
+          traffic_lights_topic:=$${TRAFFIC_LIGHTS_TOPIC} \
+          traffic_signs_topic:=$${TRAFFIC_SIGNS_TOPIC} \
           class_overlay_topic:=$${CLASS_OVERLAY_TOPIC} \
           instance_overlay_topic:=$${INSTANCE_OVERLAY_TOPIC}
     # volumes:

@@ -17,8 +17,11 @@ flowchart LR
     NODE -->|"joinTopic(config.output_prefix, 'segmentation/class_mask')"| P0:::hidden
     NODE -->|"joinTopic(config.output_prefix, 'segmentation/instance_mask')"| P1:::hidden
     NODE -->|"joinTopic(config.output_prefix, 'segmentation/detections')"| P2:::hidden
-    NODE -->|"joinTopic(config.output_prefix, 'debug/overlay/class')"| P3:::hidden
-    NODE -->|"joinTopic(config.output_prefix, 'debug/overlay/instance')"| P4:::hidden
+    NODE -->|"joinTopic(config.output_prefix, 'perception/road_users')"| P3:::hidden
+    NODE -->|"joinTopic(config.output_prefix, 'perception/traffic_lights')"| P4:::hidden
+    NODE -->|"joinTopic(config.output_prefix, 'perception/traffic_signs')"| P5:::hidden
+    NODE -->|"joinTopic(config.output_prefix, 'debug/overlay/class')"| P6:::hidden
+    NODE -->|"joinTopic(config.output_prefix, 'debug/overlay/instance')"| P7:::hidden
     classDef hidden display: none;
 ```
 
@@ -35,6 +38,9 @@ flowchart LR
 | `joinTopic(config.output_prefix, "segmentation/class_mask")` | `sensor_msgs/msg/Image` | `mono16` semantic class IDs; zero is background |
 | `joinTopic(config.output_prefix, "segmentation/instance_mask")` | `sensor_msgs/msg/Image` | `mono16` instance IDs; track IDs when tracking is enabled; zero is background |
 | `joinTopic(config.output_prefix, "segmentation/detections")` | `vision_msgs/msg/Detection2DArray` | Pixel-coordinate boxes, class names, confidence scores, and optional track IDs |
+| `joinTopic(config.output_prefix, "perception/road_users")` | `perception_msgs/msg/ObjectList` | Optional image-only road users (`ISCACTR`) with source camera observations |
+| `joinTopic(config.output_prefix, "perception/traffic_lights")` | `perception_msgs/msg/ObjectList` | Optional image-only traffic lights (`TRAFFICLIGHT`) with source camera observations |
+| `joinTopic(config.output_prefix, "perception/traffic_signs")` | `perception_msgs/msg/ObjectList` | Optional image-only traffic signs (`TRAFFICSIGN`) with source camera observations |
 | `joinTopic(config.output_prefix, "debug/overlay/class")` | `sensor_msgs/msg/Image` | Optional `bgr8` overlay colored by class |
 | `joinTopic(config.output_prefix, "debug/overlay/instance")` | `sensor_msgs/msg/Image` | Optional `bgr8` overlay colored by instance or track |
 
@@ -72,11 +78,17 @@ flowchart LR
 | `tracking.match_iou_threshold` | `float` | `0.3` | Minimum IoU used for tracker association |
 | `tracking.max_lost_frames` | `int` | `30` | Frames a track may remain unmatched before retirement |
 | `tracking.min_box_area_px` | `float` | `25.0` | Minimum detection area eligible for tracking |
+| `perception.publish_road_users` | `bool` | `false` | Publish image-only road-user object lists |
+| `perception.publish_traffic_lights` | `bool` | `false` | Publish image-only traffic-light object lists |
+| `perception.publish_traffic_signs` | `bool` | `false` | Publish image-only traffic-sign object lists |
+| `perception.include_crops` | `bool` | `true` | Include BGR image crops in perception objects |
+| `perception.include_masks` | `bool` | `true` | Include binary instance masks in perception objects |
 | `debug.publish_overlay` | `bool` | `false` | Publish overlay images |
 | `debug.print_timing` | `bool` | `false` | Log inference, postprocessing, and total processing times |
 | `debug.overlay_alpha` | `float` | `0.45` | Mask opacity in debug overlays |
 | `debug.overlay_draw_boxes` | `bool` | `true` | Draw boxes and labels in debug overlays |
 | `cameras` | `string[]` | `["camera"]` | Names of cameras to process |
+| `sensor_id` | `int` | `1` | Non-negative camera identifier in perception observations |
 | `image_topic` | `string` | `"~/image"` | Raw image base topic |
 | `transport` | `string` | `"raw"` | Image transport hint: raw or compressed |
 | `output_prefix` | `string` | `"~"` | Prefix for this camera's output topics |
@@ -92,6 +104,9 @@ flowchart LR
 | `class_mask_topic` | `"~/segmentation/class_mask"` | semantic mask topic remap |
 | `instance_mask_topic` | `"~/segmentation/instance_mask"` | instance mask topic remap |
 | `detections_topic` | `"~/segmentation/detections"` | 2D detections topic remap |
+| `road_users_topic` | `"~/perception/road_users"` | road-user objects topic remap |
+| `traffic_lights_topic` | `"~/perception/traffic_lights"` | traffic-light objects topic remap |
+| `traffic_signs_topic` | `"~/perception/traffic_signs"` | traffic-sign objects topic remap |
 | `class_overlay_topic` | `"~/debug/overlay/class"` | class overlay topic remap |
 | `instance_overlay_topic` | `"~/debug/overlay/instance"` | instance overlay topic remap |
 | `name` | `"image_instance_segmentation"` | node name |

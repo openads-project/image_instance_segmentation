@@ -17,6 +17,7 @@
 #include <mutex>
 #include <opencv2/core.hpp>
 #include <optional>
+#include <perception_msgs/msg/object_list.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/image.hpp>
 #include <shared_mutex>
@@ -31,6 +32,7 @@ namespace image_instance_segmentation {
 
 struct CameraConfig {
   std::string name;
+  int64_t sensor_id = 1;
   std::string image_topic = "~/image";
   std::string transport = "raw";
   std::string output_prefix = "~";
@@ -50,6 +52,7 @@ struct Detection {
   int semantic_class_id = 0;
   float score = 0.0f;
   std::uint16_t track_id = 0;
+  std::uint64_t object_id = 0;
   bool is_tracked = false;
   std::vector<float> mask_coefficients;  // YOLO: coefficients for the prototype masks
   int mask_query = -1;                   // RF-DETR: query whose mask logits belong to this detection
@@ -87,6 +90,11 @@ enum class ModelArchitecture {
 enum class OverlayColorMode {
   Class,
   Instance,
+};
+
+struct PerceptionClass {
+  std::uint8_t model_id = 0;
+  std::uint8_t classification = 0;
 };
 
 class ITracker;
@@ -151,6 +159,9 @@ class ImageInstanceSegmentation : public rclcpp::Node {
     rclcpp::Publisher<sensor_msgs::msg::Image>::SharedPtr class_mask_publisher;
     rclcpp::Publisher<sensor_msgs::msg::Image>::SharedPtr instance_mask_publisher;
     rclcpp::Publisher<vision_msgs::msg::Detection2DArray>::SharedPtr detections_publisher;
+    rclcpp::Publisher<perception_msgs::msg::ObjectList>::SharedPtr road_users_publisher;
+    rclcpp::Publisher<perception_msgs::msg::ObjectList>::SharedPtr traffic_lights_publisher;
+    rclcpp::Publisher<perception_msgs::msg::ObjectList>::SharedPtr traffic_signs_publisher;
     image_transport::Publisher class_overlay_publisher;
     image_transport::Publisher instance_overlay_publisher;
     rclcpp::CallbackGroup::SharedPtr callback_group;
@@ -285,6 +296,14 @@ class ImageInstanceSegmentation : public rclcpp::Node {
                                                    const std::vector<Detection>& detections,
                                                    int image_width,
                                                    int image_height);
+  /** @brief Resolve model class names to perception state models and road-user classes. */
+  void configurePerceptionClasses();
+  /** @brief Publish enabled image-only object lists, retaining optional ROI pixels. */
+  void publishPerceptionObjects(const CameraRuntime& camera,
+                                const std_msgs::msg::Header& header,
+                                const cv::Mat& bgr_image,
+                                const std::vector<Detection>& detections,
+                                const std::vector<InstanceMask>& masks) const;
   /** @brief Copy a mono16 mask into a ROS image while preserving the input
    * header. */
   sensor_msgs::msg::Image matToMono16Image(const cv::Mat& mask, const std_msgs::msg::Header& header) const;
@@ -339,6 +358,14 @@ class ImageInstanceSegmentation : public rclcpp::Node {
   std::vector<std::string> class_names_ = {"PEDESTRIAN", "BICYCLE", "MOTORCYCLE", "CAR", "UTILITY", "BUS", "ANIMAL", "VRU", "MICRO", "TRAFFIC_LIGHT", "TRAFFIC_SIGN"};
   // clang-format on
   std::vector<int64_t> class_ids_ = {1, 2, 3, 4, 5, 7, 8, 12, 13, 20, 29};
+
+  bool publish_road_users_ = false;
+  bool publish_traffic_lights_ = false;
+  bool publish_traffic_signs_ = false;
+  bool perception_include_crops_ = true;
+  bool perception_include_masks_ = true;
+  std::vector<PerceptionClass> perception_classes_;
+  mutable std::atomic<std::uint64_t> next_untracked_object_id_{1};
 
   double confidence_threshold_ = 0.25;
   double mask_threshold_ = 0.5;

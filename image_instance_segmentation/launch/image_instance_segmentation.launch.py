@@ -29,6 +29,15 @@ def generate_launch_description():
             "detections_topic", default_value="~/segmentation/detections", description="2D detections topic remap"
         ),
         DeclareLaunchArgument(
+            "road_users_topic", default_value="~/perception/road_users", description="road-user objects topic remap"
+        ),
+        DeclareLaunchArgument(
+            "traffic_lights_topic", default_value="~/perception/traffic_lights", description="traffic-light objects topic remap"
+        ),
+        DeclareLaunchArgument(
+            "traffic_signs_topic", default_value="~/perception/traffic_signs", description="traffic-sign objects topic remap"
+        ),
+        DeclareLaunchArgument(
             "class_overlay_topic", default_value="~/debug/overlay/class", description="class overlay topic remap"
         ),
         DeclareLaunchArgument(

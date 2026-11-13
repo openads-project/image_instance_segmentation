@@ -51,6 +51,7 @@ jobs:
             --target-compose-svc image-instance-segmentation
             --dep-exclude-compose-svc-all
             --include-bin /opt/tritonclient/lib/libgrpcclient.so
+            --include-path /docker-ros/ws/install/perception_msgs
             --include-bin /opt/ros/jazzy/lib/libcompressed_image_transport.so
             --include-bin /opt/ros/jazzy/lib/librcl_interfaces__rosidl_generator_py.so
             --include-exe lttng
