@@ -100,7 +100,7 @@ void ImageInstanceSegmentation::publishPerceptionObjects(const CameraRuntime& ca
         if (object.id == 0) throw std::overflow_error("Untracked object ID exhausted");
       }
       object.existence_probability = detection.score;
-      initializeState(object, model_id);
+      initializeState(object, model_id, CONTINUOUS_STATE_UNMEASURED);
       object.state.header = header;
       object.state.sensor_id.push_back(static_cast<std::uint64_t>(camera.config.sensor_id));
       if (model_id == perception_msgs::msg::HEXAMOTION::MODEL_ID) {
