@@ -10,9 +10,10 @@ List camera names in `cameras` and configure each under `camera.<name>`:
 
 | Parameter | Meaning |
 | --- | --- |
+| `camera.<name>.sensor_id` | Unique camera ID for perception evidence; defaults to its 1-based position in `cameras` |
 | `camera.<name>.image_topic` | Base image topic |
 | `camera.<name>.transport` | `raw` or `compressed`; omit `/compressed` from the base topic |
-| `camera.<name>.output_prefix` | Prefix for segmentation and overlay outputs |
+| `camera.<name>.output_prefix` | Prefix for camera output topics |
 
 The supplied parameter file configures one camera with raw transport, enables
 tracking, and selects RF-DETR-Seg decoding.
@@ -36,7 +37,34 @@ reused after a track ends.
 
 In the topic tables, `config.image_topic` is the configured input and `joinTopic`
 places outputs under the camera's prefix. Parameter names `image_topic`,
-`transport`, and `output_prefix` are per-camera suffixes.
+`sensor_id`, `transport`, and `output_prefix` are per-camera suffixes.
+
+## Perception objects
+
+Enable each object-list output independently at startup:
+
+```yaml
+perception.publish_road_users: true
+perception.publish_traffic_lights: true
+perception.publish_traffic_signs: true
+```
+
+Topics are `perception/road_users`, `perception/traffic_lights` and
+`perception/traffic_signs` under each camera's output prefix. They carry
+`perception_msgs/msg/ObjectListWithEvidence` with `HEXAMOTION`, `TRAFFICLIGHT` and `TRAFFICSIGN`
+states respectively. Metric components remain unmeasured; light state, sign type
+and road-user light states remain unknown.
+
+The standard `model.class_names` select the category and road-user classification,
+independently of `model.class_ids`. Unmapped names remain in segmentation outputs.
+Object IDs persist for a tracked object's lifetime and are not recycled when
+mask IDs are reused. Without tracking, each published detection gets a
+fresh ID. IDs are scoped to a camera stream and node lifetime.
+
+Image evidence retains source coordinates and headers. `perception.include_crops`
+and `perception.include_masks` independently include BGR crops and binary `mono8`
+ROI masks. Pixels are prepared only for subscribed outputs; empty lists are
+published for processed frames without matching detections.
 
 ## Triton model
 
@@ -77,8 +105,10 @@ Cameras run concurrently with one Triton client each. Busy cameras drop frames
 at the admission limit. Set `prediction.max_in_flight_per_camera: 1` for low
 latency; tracking enforces this limit to preserve frame order.
 
-Enable `debug.publish_overlay` for overlays and `debug.print_timing` for
-processing times.
+Enable `debug.print_timing` for processing times. To inspect results, enable
+the `perception.publish_*` object lists and view their image evidence with
+the `perception_msgs/ImageEvidence` RViz display from
+[perception_interfaces](https://github.com/ika-rwth-aachen/perception_interfaces).
 Use `ros_tracing:=true` to enable OpenADS dual-session tracing. Service images
 include the `jazzy-ika` tracing fork.
 
@@ -123,8 +153,8 @@ All settings below have the prefix `diagnostic_updater.` and are read-only.
 | `<camera>.<output>.nominal_frequency` | `0.0` Hz, disabling that topic check |
 | `<camera>.<output>.min_frequency` / `max_frequency` | `0.8` / `1.2` times nominal frequency |
 
-`<output>` is `input`, `class_mask`, `instance_mask` or `detections`; overlays are
-demand-driven. Rate checks use five reports and the ROS clock. Output timestamp
+`<output>` is `input`, `class_mask`, `instance_mask` or `detections`; perception
+object lists are demand-driven. Rate checks use five reports and the ROS clock. Output timestamp
 limits add `processing.timeout` to `inputs.max_age`. Topic details under
 `topic.<camera>.<output>` are `frequency_hz`, `{min,max,target}_frequency_hz`,
 `events_in_window`, `events_since_start`, `window_s`, `{min,max}_delay_s`,

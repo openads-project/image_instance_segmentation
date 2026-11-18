@@ -42,6 +42,7 @@ jobs:
           rmw-implementation: rmw_zenoh_cpp
           command: ros2 launch image_instance_segmentation image_instance_segmentation.launch.py
           enable-recursive-vcs-import: "false"
+          enable-build-required-packages-only: "true"
           enable-industrial-ci: true
           enable-slim: "true"
           # Retain optional runtime binaries and plugin dependencies.
@@ -51,6 +52,7 @@ jobs:
             --target-compose-svc image-instance-segmentation
             --dep-exclude-compose-svc-all
             --include-bin /opt/tritonclient/lib/libgrpcclient.so
+            --include-path /docker-ros/ws/install/perception_msgs
             --include-bin /opt/ros/jazzy/lib/libcompressed_image_transport.so
             --include-bin /opt/ros/jazzy/lib/librcl_interfaces__rosidl_generator_py.so
             --include-exe lttng

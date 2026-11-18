@@ -10,6 +10,8 @@ find_package(OpenCV REQUIRED COMPONENTS core dnn imgproc video)
 find_package(diagnostic_msgs REQUIRED)
 find_package(diagnostic_updater REQUIRED)
 find_package(image_transport REQUIRED)
+find_package(perception_msgs REQUIRED)
+find_package(perception_msgs_utils REQUIRED)
 find_package(rcl_interfaces REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(rclcpp_components REQUIRED)
@@ -21,6 +23,7 @@ find_package(vision_msgs REQUIRED)
 add_library(${PROJECT_NAME}_lib SHARED
   src/ImageInstanceSegmentation.cpp
   src/Diagnostics.cpp
+  src/PerceptionOutputs.cpp
 )
 
 target_include_directories(${PROJECT_NAME}_lib PUBLIC
@@ -34,6 +37,8 @@ ament_target_dependencies(${PROJECT_NAME}_lib
   diagnostic_msgs
   diagnostic_updater
   image_transport
+  perception_msgs
+  perception_msgs_utils
   rcl_interfaces
   rclcpp
   rclcpp_components

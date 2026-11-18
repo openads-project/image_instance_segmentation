@@ -2,7 +2,7 @@
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
   <name>image_instance_segmentation</name>
-  <version>1.1.0</version>
+  <version>1.2.0</version>
   <description>Image instance segmentation inference node backed by Triton</description>
 
   <maintainer email="lukas.ostendorf@rwth-aachen.de">Lukas Ostendorf</maintainer>
@@ -17,6 +17,8 @@
   <depend>diagnostic_updater</depend>
   <depend>image_transport</depend>
   <depend>libopencv-dev</depend>
+  <depend>perception_msgs</depend>
+  <depend>perception_msgs_utils</depend>
   <depend>rcl_interfaces</depend>
   <depend>rclcpp</depend>
   <depend>rclcpp_components</depend>

@@ -9,7 +9,6 @@
 #include <cmath>
 #include <condition_variable>
 #include <cstdint>
-#include <cstdio>
 #include <cstring>
 #include <deque>
 #include <functional>
@@ -53,8 +52,9 @@ ImageInstanceSegmentation::CameraRuntime::CameraRuntime(CameraRuntime&& other) n
       class_mask_publisher(std::move(other.class_mask_publisher)),
       instance_mask_publisher(std::move(other.instance_mask_publisher)),
       detections_publisher(std::move(other.detections_publisher)),
-      class_overlay_publisher(std::move(other.class_overlay_publisher)),
-      instance_overlay_publisher(std::move(other.instance_overlay_publisher)),
+      road_users_publisher(std::move(other.road_users_publisher)),
+      traffic_lights_publisher(std::move(other.traffic_lights_publisher)),
+      traffic_signs_publisher(std::move(other.traffic_signs_publisher)),
       callback_group(std::move(other.callback_group)),
       tracker(std::move(other.tracker)),
       in_flight(other.in_flight.load()) {}
@@ -66,8 +66,9 @@ ImageInstanceSegmentation::CameraRuntime& ImageInstanceSegmentation::CameraRunti
     class_mask_publisher = std::move(other.class_mask_publisher);
     instance_mask_publisher = std::move(other.instance_mask_publisher);
     detections_publisher = std::move(other.detections_publisher);
-    class_overlay_publisher = std::move(other.class_overlay_publisher);
-    instance_overlay_publisher = std::move(other.instance_overlay_publisher);
+    road_users_publisher = std::move(other.road_users_publisher);
+    traffic_lights_publisher = std::move(other.traffic_lights_publisher);
+    traffic_signs_publisher = std::move(other.traffic_signs_publisher);
     callback_group = std::move(other.callback_group);
     tracker = std::move(other.tracker);
     in_flight.store(other.in_flight.load());
@@ -257,30 +258,6 @@ InstanceMask maskFromLogits(
   const double logit_threshold = std::log(probability_threshold / (1.0 - probability_threshold));
   cv::compare(resized(mask.roi), logit_threshold, mask.pixels, cv::CMP_GT);
   return mask;
-}
-
-/** @brief Choose a repeatable BGR overlay color from the palette. */
-cv::Scalar colorForInstance(std::size_t index) {
-  static const std::array<cv::Scalar, 12> colors = {cv::Scalar(255, 56, 56),  cv::Scalar(255, 157, 151), cv::Scalar(255, 112, 31),
-                                                    cv::Scalar(255, 178, 29), cv::Scalar(207, 210, 49),  cv::Scalar(72, 249, 10),
-                                                    cv::Scalar(146, 204, 23), cv::Scalar(61, 219, 134),  cv::Scalar(26, 147, 52),
-                                                    cv::Scalar(0, 212, 187),  cv::Scalar(44, 153, 168),  cv::Scalar(0, 194, 255)};
-  return colors[index % colors.size()];
-}
-
-// Instances keep a stable color across frames by keying off the track ID when
-// tracking is enabled; otherwise they fall back to the (frame-local, unstable)
-// detection index.
-/** @brief Choose the palette index from semantic class, track ID, or
- * frame-local instance. */
-std::size_t overlayColorIndex(const Detection& detection,
-                              std::size_t detection_index,
-                              OverlayColorMode color_mode,
-                              bool tracking_enabled) {
-  if (color_mode == OverlayColorMode::Class) {
-    return static_cast<std::size_t>(detection.class_index);
-  }
-  return tracking_enabled && detection.track_id != 0 ? static_cast<std::size_t>(detection.track_id - 1) : detection_index;
 }
 
 /** @brief Validate image storage and convert supported encodings to BGR; BGR
@@ -563,6 +540,7 @@ class ByteTracker final : public ITracker {
           track.state = TrackLifecycle::Tracked;
         }
         track.latest_detection.track_id = track.id;
+        track.latest_detection.object_id = track.object_id;
         track.latest_detection.is_tracked = true;
         tracked_detections.push_back(track.latest_detection);
         continue;
@@ -604,6 +582,7 @@ class ByteTracker final : public ITracker {
     Detection latest_detection;
     TrackLifecycle state = TrackLifecycle::Tentative;
     std::uint16_t id = 0;
+    std::uint64_t object_id = 0;
     int hits = 0;
     int lost_frames = 0;
     bool updated_this_frame = false;
@@ -683,6 +662,7 @@ class ByteTracker final : public ITracker {
     track.latest_detection = detection;
     track.latest_detection.box = track.predicted_box;
     track.latest_detection.track_id = track.id;
+    track.latest_detection.object_id = track.object_id;
     track.latest_detection.is_tracked = true;
     track.updated_this_frame = true;
     track.lost_frames = 0;
@@ -704,7 +684,10 @@ class ByteTracker final : public ITracker {
     track.filter = makeKalmanFilter(detection.box);
     track.predicted_box = detection.box;
     track.latest_detection = detection;
+    if (next_object_id_ == 0) throw std::overflow_error("Object tracking ID exhausted");
+    track.object_id = next_object_id_++;
     track.latest_detection.track_id = id;
+    track.latest_detection.object_id = track.object_id;
     track.latest_detection.is_tracked = true;
     track.state = TrackLifecycle::Tentative;
     track.id = id;
@@ -742,6 +725,7 @@ class ByteTracker final : public ITracker {
   std::vector<Track> tracks_;
   std::deque<std::uint16_t> reusable_ids_;
   std::uint16_t next_track_id_ = 1;
+  std::uint64_t next_object_id_ = 1;
 };
 
 }  // namespace
@@ -755,6 +739,7 @@ ImageInstanceSegmentation::ImageInstanceSegmentation(const rclcpp::NodeOptions& 
 
   loadParameters();
   validateParameters();
+  configurePerceptionClasses();
   initializeModel();
   setupCameras();
   setupDiagnostics();
@@ -948,13 +933,17 @@ void ImageInstanceSegmentation::loadParameters() {
                           "Minimum detection area eligible for tracking", false, false, true, 0.0,
                           std::numeric_limits<double>::max(), 0.0);
 
-  declareAndLoadParameter("debug.publish_overlay", publish_overlay_, "Publish overlay images", true, false, false);
+  declareAndLoadParameter("perception.publish_road_users", publish_road_users_, "Publish image-only road-user object lists");
+  declareAndLoadParameter("perception.publish_traffic_lights", publish_traffic_lights_,
+                          "Publish image-only traffic-light object lists");
+  declareAndLoadParameter("perception.publish_traffic_signs", publish_traffic_signs_,
+                          "Publish image-only traffic-sign object lists");
+  declareAndLoadParameter("perception.include_crops", perception_include_crops_, "Include BGR image crops in perception objects");
+  declareAndLoadParameter("perception.include_masks", perception_include_masks_,
+                          "Include binary instance masks in perception objects");
+
   declareAndLoadParameter("debug.print_timing", print_timing_, "Log inference, postprocessing, and total processing times", true,
                           false, false);
-  declareAndLoadParameter("debug.overlay_alpha", overlay_alpha_, "Mask opacity in debug overlays", true, false, false, 0.0, 1.0,
-                          0.0);
-  declareAndLoadParameter("debug.overlay_draw_boxes", overlay_draw_boxes_, "Draw boxes and labels in debug overlays", true, false,
-                          false);
 
   if (tracker_config_.enabled && max_in_flight_per_camera_ != 1) {
     RCLCPP_INFO(get_logger(),
@@ -970,10 +959,12 @@ void ImageInstanceSegmentation::loadParameters() {
     const std::string prefix = "camera." + name + ".";
     CameraConfig config;
     config.name = name;
+    config.sensor_id = static_cast<int64_t>(camera_configs_.size()) + 1;
     if (name != "camera") {
       config.image_topic = "~/" + name + "/image";
       config.output_prefix = "~/" + name;
     }
+    declareAndLoadParameter(prefix + "sensor_id", config.sensor_id, "Non-negative camera identifier in perception evidence");
     declareAndLoadParameter(prefix + "image_topic", config.image_topic, "Raw image base topic");
     declareAndLoadParameter(prefix + "transport", config.transport, "Image transport hint: raw or compressed");
     declareAndLoadParameter(prefix + "output_prefix", config.output_prefix, "Prefix for this camera's output topics");
@@ -1013,8 +1004,6 @@ void ImageInstanceSegmentation::validateParameters() const {
   if (!std::isfinite(mask_threshold_) || mask_threshold_ < 0.0 || mask_threshold_ > 1.0) fail("mask threshold must be in [0, 1]");
   if (!std::isfinite(nms_iou_threshold_) || nms_iou_threshold_ < 0.0 || nms_iou_threshold_ > 1.0)
     fail("NMS IoU threshold must be in [0, 1]");
-  if (!std::isfinite(overlay_alpha_) || overlay_alpha_ < 0.0 || overlay_alpha_ > 1.0)
-    fail("debug.overlay_alpha must be in [0, 1]");
   if (tracker_config_.backend != "bytetrack") fail("tracking.backend must be 'bytetrack'");
   if (!std::isfinite(tracker_config_.low_confidence_threshold) || tracker_config_.low_confidence_threshold < 0.0 ||
       tracker_config_.low_confidence_threshold > 1.0) {
@@ -1043,11 +1032,15 @@ void ImageInstanceSegmentation::validateParameters() const {
     fail("tracking.min_box_area_px must be non-negative");
   if (camera_configs_.empty()) fail("cameras must contain at least one camera name");
   std::vector<std::string> camera_names;
+  std::vector<int64_t> sensor_ids;
   for (const auto& camera : camera_configs_) {
     if (std::find(camera_names.begin(), camera_names.end(), camera.name) != camera_names.end()) {
       fail("camera names must be unique");
     }
     camera_names.push_back(camera.name);
+    if (camera.sensor_id < 0 || std::find(sensor_ids.begin(), sensor_ids.end(), camera.sensor_id) != sensor_ids.end())
+      fail("camera sensor IDs must be non-negative and unique");
+    sensor_ids.push_back(camera.sensor_id);
     if (camera.name.empty()) fail("camera names must not be empty");
     if (camera.image_topic.empty()) fail("camera." + camera.name + ".image_topic must not be empty");
     if (camera.output_prefix.empty()) fail("camera." + camera.name + ".output_prefix must not be empty");
@@ -1145,12 +1138,15 @@ void ImageInstanceSegmentation::setupCameras() {
         joinTopic(config.output_prefix, "segmentation/instance_mask"), rclcpp::SensorDataQoS(), pub_options);
     runtime.detections_publisher = create_publisher<vision_msgs::msg::Detection2DArray>(
         joinTopic(config.output_prefix, "segmentation/detections"), rclcpp::SensorDataQoS(), pub_options);
-    runtime.class_overlay_publisher = image_transport::create_publisher(
-        this, get_node_topics_interface()->resolve_topic_name(joinTopic(config.output_prefix, "debug/overlay/class")),
-        rclcpp::SensorDataQoS().get_rmw_qos_profile(), pub_options);
-    runtime.instance_overlay_publisher = image_transport::create_publisher(
-        this, get_node_topics_interface()->resolve_topic_name(joinTopic(config.output_prefix, "debug/overlay/instance")),
-        rclcpp::SensorDataQoS().get_rmw_qos_profile(), pub_options);
+    if (publish_road_users_)
+      runtime.road_users_publisher = create_publisher<perception_msgs::msg::ObjectListWithEvidence>(
+          joinTopic(config.output_prefix, "perception/road_users"), rclcpp::SensorDataQoS(), pub_options);
+    if (publish_traffic_lights_)
+      runtime.traffic_lights_publisher = create_publisher<perception_msgs::msg::ObjectListWithEvidence>(
+          joinTopic(config.output_prefix, "perception/traffic_lights"), rclcpp::SensorDataQoS(), pub_options);
+    if (publish_traffic_signs_)
+      runtime.traffic_signs_publisher = create_publisher<perception_msgs::msg::ObjectListWithEvidence>(
+          joinTopic(config.output_prefix, "perception/traffic_signs"), rclcpp::SensorDataQoS(), pub_options);
     runtime.image_subscriber = image_transport::create_subscription(
         this, get_node_topics_interface()->resolve_topic_name(config.image_topic),
         [this, name = config.name](const sensor_msgs::msg::Image::ConstSharedPtr& msg) { imageCallback(msg, name); },
@@ -1378,9 +1374,9 @@ void ImageInstanceSegmentation::processImage(const std_msgs::msg::Header& header
   // Keep publication in the same critical section as inference/tracking.
   publishResults(camera, header, bgr_image, detections, masks);
   auto& state = camera_health_.at(camera_name);
-  for (const auto* key : {"class_mask", "instance_mask", "detections"}) {
-    if (auto& task = state.topics.at(key).task; task && header.stamp.sec >= 0 && header.stamp.nanosec < 1000000000u)
-      task->tick(header.stamp);
+  for (auto& [key, topic] : state.topics) {
+    if (key == "input") continue;
+    if (auto& task = topic.task; task && header.stamp.sec >= 0 && header.stamp.nanosec < 1000000000u) task->tick(header.stamp);
   }
   {
     std::lock_guard<std::mutex> state_lock(state.mutex);
@@ -1770,14 +1766,7 @@ void ImageInstanceSegmentation::publishResults(const CameraRuntime& camera,
   camera.class_mask_publisher->publish(matToMono16Image(class_mask, header));
   camera.instance_mask_publisher->publish(matToMono16Image(instance_mask, header));
   camera.detections_publisher->publish(makeDetectionsMessage(detections, header));
-  if (publish_overlay_) {
-    if (camera.class_overlay_publisher && camera.class_overlay_publisher.getNumSubscribers() > 0) {
-      camera.class_overlay_publisher.publish(makeOverlay(bgr_image, detections, masks, header, OverlayColorMode::Class));
-    }
-    if (camera.instance_overlay_publisher && camera.instance_overlay_publisher.getNumSubscribers() > 0) {
-      camera.instance_overlay_publisher.publish(makeOverlay(bgr_image, detections, masks, header, OverlayColorMode::Instance));
-    }
-  }
+  publishPerceptionObjects(camera, header, bgr_image, detections, masks);
 }
 
 sensor_msgs::msg::Image ImageInstanceSegmentation::matToMono16Image(const cv::Mat& mask,
@@ -1795,70 +1784,6 @@ sensor_msgs::msg::Image ImageInstanceSegmentation::matToMono16Image(const cv::Ma
     auto* dst = msg.data.data() + static_cast<std::size_t>(y) * msg.step;
     std::memcpy(dst, src, static_cast<std::size_t>(msg.step));
   }
-  return msg;
-}
-
-sensor_msgs::msg::Image ImageInstanceSegmentation::makeOverlay(const cv::Mat& bgr_image,
-                                                               const std::vector<Detection>& detections,
-                                                               const std::vector<InstanceMask>& masks,
-                                                               const std_msgs::msg::Header& header,
-                                                               OverlayColorMode color_mode) const {
-  cv::Mat overlay = bgr_image.clone();
-
-  // Alpha-blend each instance's mask color into the camera image, restricted to
-  // that mask's pixels, so unsegmented background stays untouched instead of
-  // turning black.
-  cv::Mat color_layer(overlay.size(), overlay.type(), cv::Scalar(0, 0, 0));
-  cv::Mat coverage(overlay.size(), CV_8UC1, cv::Scalar(0));
-  for (std::size_t i = 0; i < detections.size() && i < masks.size(); ++i) {
-    const std::size_t color_index = overlayColorIndex(detections[i], i, color_mode, tracker_config_.enabled);
-    if (masks[i].pixels.empty()) continue;
-    color_layer(masks[i].roi).setTo(colorForInstance(color_index), masks[i].pixels);
-    coverage(masks[i].roi).setTo(255, masks[i].pixels);
-  }
-  cv::Mat blended;
-  cv::addWeighted(overlay, 1.0 - overlay_alpha_, color_layer, overlay_alpha_, 0.0, blended);
-  blended.copyTo(overlay, coverage);
-
-  if (overlay_draw_boxes_) {
-    for (std::size_t i = 0; i < detections.size(); ++i) {
-      const Detection& detection = detections[i];
-      const std::size_t color_index = overlayColorIndex(detection, i, color_mode, tracker_config_.enabled);
-      const cv::Scalar color = colorForInstance(color_index);
-
-      const cv::Rect box = boxRoi(detection.box, overlay.cols, overlay.rows);
-      cv::rectangle(overlay, box, color, 2);
-
-      std::string label = detection.class_index >= 0 && static_cast<std::size_t>(detection.class_index) < class_names_.size()
-                              ? class_names_[static_cast<std::size_t>(detection.class_index)]
-                              : "?";
-      if (tracker_config_.enabled && detection.track_id != 0) {
-        label += " #" + std::to_string(detection.track_id);
-      }
-      char score_suffix[16];
-      std::snprintf(score_suffix, sizeof(score_suffix), " %.2f", static_cast<double>(detection.score));
-      label += score_suffix;
-
-      int baseline = 0;
-      const cv::Size text_size = cv::getTextSize(label, cv::FONT_HERSHEY_SIMPLEX, 0.5, 1, &baseline);
-      const int label_bottom = std::max(box.y, text_size.height + 4);
-      cv::rectangle(overlay, cv::Point(box.x, label_bottom - text_size.height - 4),
-                    cv::Point(box.x + text_size.width + 4, label_bottom), color, cv::FILLED);
-      cv::putText(overlay, label, cv::Point(box.x + 2, label_bottom - 2), cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(0, 0, 0), 1,
-                  cv::LINE_AA);
-    }
-  }
-
-  sensor_msgs::msg::Image msg;
-  msg.header = header;
-  msg.height = static_cast<std::uint32_t>(overlay.rows);
-  msg.width = static_cast<std::uint32_t>(overlay.cols);
-  msg.encoding = sensor_msgs::image_encodings::BGR8;
-  msg.is_bigendian = false;
-  msg.step = static_cast<sensor_msgs::msg::Image::_step_type>(overlay.cols * overlay.elemSize());
-  const std::size_t size = static_cast<std::size_t>(msg.step) * msg.height;
-  msg.data.resize(size);
-  std::memcpy(msg.data.data(), overlay.data, size);
   return msg;
 }
 

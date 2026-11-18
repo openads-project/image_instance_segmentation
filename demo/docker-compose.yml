@@ -58,8 +58,9 @@ services:
       - class_mask_topic:=/demo/class_mask
       - instance_mask_topic:=/demo/instance_mask
       - detections_topic:=/demo/detections
-      - class_overlay_topic:=/demo/overlay/class
-      - instance_overlay_topic:=/demo/overlay/instance
+      - road_users_topic:=/demo/perception/road_users
+      - traffic_lights_topic:=/demo/perception/traffic_lights
+      - traffic_signs_topic:=/demo/perception/traffic_signs
 
   bag-play:
     image: ghcr.io/openads-project/monitoring:v1.0.0
@@ -94,7 +95,7 @@ services:
       - --disable-keyboard-controls
 
   visualization:
-    image: ghcr.io/openads-project/monitoring:v1.0.0
+    image: ${VISUALIZATION_IMAGE:-ghcr.io/openads-project/monitoring:v1.0.0}
     depends_on:
       image-instance-segmentation:
         condition: service_started
@@ -105,8 +106,8 @@ services:
       QT_X11_NO_MITSHM: "1"
     volumes:
       - /tmp/.X11-unix:/tmp/.X11-unix:rw
-      - ./visualization/open_image_view.py:/demo/open_image_view.py:ro
-    command: [python3, /demo/open_image_view.py]
+      - ./visualization/demo.rviz:/demo/demo.rviz:ro
+    command: [ros2, run, rviz2, rviz2, -d, /demo/demo.rviz]
 
 volumes:
   triton-cache:

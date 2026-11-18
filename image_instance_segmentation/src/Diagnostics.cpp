@@ -99,10 +99,13 @@ void ImageInstanceSegmentation::setupDiagnostics() {
   diagnostic_updater_->setHardwareID("none");
   for (auto& [name, state] : camera_health_) {
     const auto& camera = cameras_.at(name);
-    const std::map<std::string, std::string> topics{{"input", camera.image_subscriber.getTopic()},
-                                                    {"class_mask", camera.class_mask_publisher->get_topic_name()},
-                                                    {"instance_mask", camera.instance_mask_publisher->get_topic_name()},
-                                                    {"detections", camera.detections_publisher->get_topic_name()}};
+    std::map<std::string, std::string> topics{{"input", camera.image_subscriber.getTopic()},
+                                              {"class_mask", camera.class_mask_publisher->get_topic_name()},
+                                              {"instance_mask", camera.instance_mask_publisher->get_topic_name()},
+                                              {"detections", camera.detections_publisher->get_topic_name()}};
+    if (camera.road_users_publisher) topics.emplace("road_users", camera.road_users_publisher->get_topic_name());
+    if (camera.traffic_lights_publisher) topics.emplace("traffic_lights", camera.traffic_lights_publisher->get_topic_name());
+    if (camera.traffic_signs_publisher) topics.emplace("traffic_signs", camera.traffic_signs_publisher->get_topic_name());
     for (const auto& [key, topic] : topics) {
       auto& cfg = state.topics[key];
       const std::string prefix = "diagnostic_updater." + name + "." + key + ".";

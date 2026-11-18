@@ -17,7 +17,7 @@
 
 This OpenADS service performs image instance segmentation through Triton Inference Server.
 It supports multiple cameras, optional tracking, segmentation masks, 2D detections,
-and debug overlays. Model weights and datasets are supplied separately.
+and image-only perception object lists. Model weights and datasets are supplied separately.
 
 <p align="center">
   <strong>🚀 <a href="#-quick-start">Quick Start</a></strong> • <strong>💻 <a href="#-development">Development</a></strong> • <strong>📝 <a href="#-documentation">Documentation</a></strong>
@@ -32,7 +32,7 @@ and debug overlays. Model weights and datasets are supplied separately.
 
 ## 🚀 Quick Start
 
-Run the demo with Triton, recorded camera images, and a segmentation overlay viewer:
+Run the demo with Triton, recorded camera images, and an RViz view of the detected objects:
 
 ```bash
 cd demo

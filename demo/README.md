@@ -1,7 +1,7 @@
 # RF-DETR-Seg Demo
 
 Four services run RF-DETR-Seg inference on a recorded camera stream: Triton,
-rosbag playback, image instance segmentation, and `rqt_image_view`.
+rosbag playback, image instance segmentation, and RViz.
 
 Requires Docker Compose 2.35 or newer, NVIDIA Container Toolkit with a compatible
 GPU/driver, and an X11 or XWayland display.
@@ -28,10 +28,15 @@ To customize the demo, copy `.env.example` to `.env` and edit the settings.
 the Triton model image. Model and node settings are in
 [config/params.yml](config/params.yml).
 
-The viewer opens `/demo/overlay/instance`; select `/demo/overlay/class` in its
-topic dropdown for class colors. Masks and boxes are published on
-`/demo/class_mask`, `/demo/instance_mask`, and `/demo/detections`.
-No calibration or TF is needed for these image-coordinate outputs.
+RViz shows the image-only object lists `/demo/perception/road_users`,
+`/demo/perception/traffic_signs`, and `/demo/perception/traffic_lights` in
+separate panels: road users with boxes, masks, and track IDs on the matching
+camera image, traffic signs and lights as their image crops. Panels can be
+rearranged or floated as windows; the layout is in
+[visualization/demo.rviz](visualization/demo.rviz). Full-frame masks and boxes
+are published on `/demo/class_mask`, `/demo/instance_mask`, and
+`/demo/detections`. No calibration or TF is needed for these image-coordinate
+outputs.
 
 The first start can take several minutes while TensorRT prepares the model.
 Its cache is retained in a Docker volume for subsequent runs.

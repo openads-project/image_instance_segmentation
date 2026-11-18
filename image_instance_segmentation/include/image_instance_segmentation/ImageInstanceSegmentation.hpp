@@ -17,6 +17,7 @@
 #include <mutex>
 #include <opencv2/core.hpp>
 #include <optional>
+#include <perception_msgs/msg/object_list_with_evidence.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/image.hpp>
 #include <shared_mutex>
@@ -31,6 +32,7 @@ namespace image_instance_segmentation {
 
 struct CameraConfig {
   std::string name;
+  int64_t sensor_id = 1;
   std::string image_topic = "~/image";
   std::string transport = "raw";
   std::string output_prefix = "~";
@@ -50,6 +52,7 @@ struct Detection {
   int semantic_class_id = 0;
   float score = 0.0f;
   std::uint16_t track_id = 0;
+  std::uint64_t object_id = 0;
   bool is_tracked = false;
   std::vector<float> mask_coefficients;  // YOLO: coefficients for the prototype masks
   int mask_query = -1;                   // RF-DETR: query whose mask logits belong to this detection
@@ -84,9 +87,9 @@ enum class ModelArchitecture {
   RfDetr,  // RF-DETR-Seg: stretch, per-query class logits and mask logits, NMS
 };
 
-enum class OverlayColorMode {
-  Class,
-  Instance,
+struct PerceptionClass {
+  std::uint8_t model_id = 0;
+  std::uint8_t classification = 0;
 };
 
 class ITracker;
@@ -151,8 +154,9 @@ class ImageInstanceSegmentation : public rclcpp::Node {
     rclcpp::Publisher<sensor_msgs::msg::Image>::SharedPtr class_mask_publisher;
     rclcpp::Publisher<sensor_msgs::msg::Image>::SharedPtr instance_mask_publisher;
     rclcpp::Publisher<vision_msgs::msg::Detection2DArray>::SharedPtr detections_publisher;
-    image_transport::Publisher class_overlay_publisher;
-    image_transport::Publisher instance_overlay_publisher;
+    rclcpp::Publisher<perception_msgs::msg::ObjectListWithEvidence>::SharedPtr road_users_publisher;
+    rclcpp::Publisher<perception_msgs::msg::ObjectListWithEvidence>::SharedPtr traffic_lights_publisher;
+    rclcpp::Publisher<perception_msgs::msg::ObjectListWithEvidence>::SharedPtr traffic_signs_publisher;
     rclcpp::CallbackGroup::SharedPtr callback_group;
     std::unique_ptr<ITracker> tracker;
     std::atomic<int> in_flight{0};
@@ -260,8 +264,7 @@ class ImageInstanceSegmentation : public rclcpp::Node {
   /** @brief Keep confidence-ordered detections using class-specific IoU
    * suppression. */
   std::vector<Detection> applyNms(std::vector<Detection> detections) const;
-  /** @brief Publish masks and detection metadata, and generate overlays only
-   * when requested. */
+  /** @brief Publish masks, detection metadata, and enabled perception object lists. */
   void publishResults(const CameraRuntime& camera,
                       const std_msgs::msg::Header& header,
                       const cv::Mat& bgr_image,
@@ -285,16 +288,17 @@ class ImageInstanceSegmentation : public rclcpp::Node {
                                                    const std::vector<Detection>& detections,
                                                    int image_width,
                                                    int image_height);
+  /** @brief Resolve model class names to perception state models and road-user classes. */
+  void configurePerceptionClasses();
+  /** @brief Publish enabled image-only object lists, retaining optional ROI pixels. */
+  void publishPerceptionObjects(const CameraRuntime& camera,
+                                const std_msgs::msg::Header& header,
+                                const cv::Mat& bgr_image,
+                                const std::vector<Detection>& detections,
+                                const std::vector<InstanceMask>& masks) const;
   /** @brief Copy a mono16 mask into a ROS image while preserving the input
    * header. */
   sensor_msgs::msg::Image matToMono16Image(const cv::Mat& mask, const std_msgs::msg::Header& header) const;
-  /** @brief Blend instance mask ROIs onto the input image and optionally draw
-   * labeled boxes. */
-  sensor_msgs::msg::Image makeOverlay(const cv::Mat& bgr_image,
-                                      const std::vector<Detection>& detections,
-                                      const std::vector<InstanceMask>& masks,
-                                      const std_msgs::msg::Header& header,
-                                      OverlayColorMode color_mode) const;
   /** @brief Build original-image detections with class scores and optional
    * per-camera track IDs. */
   vision_msgs::msg::Detection2DArray makeDetectionsMessage(const std::vector<Detection>& detections,
@@ -340,14 +344,19 @@ class ImageInstanceSegmentation : public rclcpp::Node {
   // clang-format on
   std::vector<int64_t> class_ids_ = {1, 2, 3, 4, 5, 7, 8, 12, 13, 20, 29};
 
+  bool publish_road_users_ = false;
+  bool publish_traffic_lights_ = false;
+  bool publish_traffic_signs_ = false;
+  bool perception_include_crops_ = true;
+  bool perception_include_masks_ = true;
+  std::vector<PerceptionClass> perception_classes_;
+  mutable std::atomic<std::uint64_t> next_untracked_object_id_{1};
+
   double confidence_threshold_ = 0.25;
   double mask_threshold_ = 0.5;
   double nms_iou_threshold_ = 0.45;
   TrackerConfig tracker_config_;
   bool print_timing_ = false;
-  bool publish_overlay_ = false;
-  double overlay_alpha_ = 0.45;
-  bool overlay_draw_boxes_ = true;
 
   std::vector<CameraConfig> camera_configs_;
   std::unordered_map<std::string, CameraRuntime> cameras_;
