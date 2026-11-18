@@ -964,7 +964,7 @@ void ImageInstanceSegmentation::loadParameters() {
       config.image_topic = "~/" + name + "/image";
       config.output_prefix = "~/" + name;
     }
-    declareAndLoadParameter(prefix + "sensor_id", config.sensor_id, "Non-negative camera identifier in perception observations");
+    declareAndLoadParameter(prefix + "sensor_id", config.sensor_id, "Non-negative camera identifier in perception evidence");
     declareAndLoadParameter(prefix + "image_topic", config.image_topic, "Raw image base topic");
     declareAndLoadParameter(prefix + "transport", config.transport, "Image transport hint: raw or compressed");
     declareAndLoadParameter(prefix + "output_prefix", config.output_prefix, "Prefix for this camera's output topics");
@@ -1139,13 +1139,13 @@ void ImageInstanceSegmentation::setupCameras() {
     runtime.detections_publisher = create_publisher<vision_msgs::msg::Detection2DArray>(
         joinTopic(config.output_prefix, "segmentation/detections"), rclcpp::SensorDataQoS(), pub_options);
     if (publish_road_users_)
-      runtime.road_users_publisher = create_publisher<perception_msgs::msg::ObjectList>(
+      runtime.road_users_publisher = create_publisher<perception_msgs::msg::ObjectListWithEvidence>(
           joinTopic(config.output_prefix, "perception/road_users"), rclcpp::SensorDataQoS(), pub_options);
     if (publish_traffic_lights_)
-      runtime.traffic_lights_publisher = create_publisher<perception_msgs::msg::ObjectList>(
+      runtime.traffic_lights_publisher = create_publisher<perception_msgs::msg::ObjectListWithEvidence>(
           joinTopic(config.output_prefix, "perception/traffic_lights"), rclcpp::SensorDataQoS(), pub_options);
     if (publish_traffic_signs_)
-      runtime.traffic_signs_publisher = create_publisher<perception_msgs::msg::ObjectList>(
+      runtime.traffic_signs_publisher = create_publisher<perception_msgs::msg::ObjectListWithEvidence>(
           joinTopic(config.output_prefix, "perception/traffic_signs"), rclcpp::SensorDataQoS(), pub_options);
     runtime.image_subscriber = image_transport::create_subscription(
         this, get_node_topics_interface()->resolve_topic_name(config.image_topic),

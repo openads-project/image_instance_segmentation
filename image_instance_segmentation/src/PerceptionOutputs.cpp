@@ -81,19 +81,20 @@ void ImageInstanceSegmentation::publishPerceptionObjects(const CameraRuntime& ca
                                                          const std::vector<Detection>& detections,
                                                          const std::vector<InstanceMask>& masks) const {
   using namespace perception_msgs::object_access;
-  // Image observations require a valid source camera header.
+  // Image evidence requires a valid source camera header.
   if (header.frame_id.empty() || header.stamp.sec < 0 || header.stamp.nanosec >= 1000000000u) return;
-  const auto publish = [&](const rclcpp::Publisher<perception_msgs::msg::ObjectList>::SharedPtr& publisher,
+  const auto publish = [&](const rclcpp::Publisher<perception_msgs::msg::ObjectListWithEvidence>::SharedPtr& publisher,
                            std::uint8_t model_id) {
     if (!publisher || (publisher->get_subscription_count() == 0 && publisher->get_intra_process_subscription_count() == 0))
       return;
-    auto objects = std::make_unique<perception_msgs::msg::ObjectList>();
+    auto objects = std::make_unique<perception_msgs::msg::ObjectListWithEvidence>();
     objects->header = header;
     for (std::size_t i = 0; i < detections.size(); ++i) {
       const auto& detection = detections[i];
       const auto& classification = perception_classes_.at(static_cast<std::size_t>(detection.class_index));
       if (classification.model_id != model_id) continue;
-      perception_msgs::msg::Object object;
+      perception_msgs::msg::ObjectWithEvidence entry;
+      auto& object = entry.object;
       object.id = detection.object_id;
       if (!detection.is_tracked) {
         object.id = next_untracked_object_id_.fetch_add(1, std::memory_order_relaxed);
@@ -111,9 +112,10 @@ void ImageInstanceSegmentation::publishPerceptionObjects(const CameraRuntime& ca
       } else if (model_id == perception_msgs::msg::TRAFFICLIGHT::MODEL_ID) {
         setTrafficLightType(object, perception_msgs::msg::TRAFFICLIGHT::TYPE_UNKNOWN);
       }
-      perception_msgs::msg::ImageObservation image;
-      image.header = header;
-      image.sensor_id = static_cast<std::uint64_t>(camera.config.sensor_id);
+      perception_msgs::msg::Evidence evidence;
+      evidence.header = header;
+      evidence.sensor_id = static_cast<std::uint64_t>(camera.config.sensor_id);
+      perception_msgs::msg::ImageEvidence image;
       image.image_width = static_cast<std::uint32_t>(bgr_image.cols);
       image.image_height = static_cast<std::uint32_t>(bgr_image.rows);
       image.bounding_box.center.position.x = detection.box.x + detection.box.width * 0.5;
@@ -130,8 +132,9 @@ void ImageInstanceSegmentation::publishPerceptionObjects(const CameraRuntime& ca
         if (perception_include_masks_ && i < masks.size() && !masks[i].pixels.empty())
           image.mask = roiImage(masks[i].pixels, header, sensor_msgs::image_encodings::MONO8);
       }
-      object.state.image_observations.push_back(std::move(image));
-      objects->objects.push_back(std::move(object));
+      evidence.image.push_back(std::move(image));
+      entry.evidence.push_back(std::move(evidence));
+      objects->objects.push_back(std::move(entry));
     }
     publisher->publish(std::move(objects));
   };

@@ -17,7 +17,7 @@
 #include <mutex>
 #include <opencv2/core.hpp>
 #include <optional>
-#include <perception_msgs/msg/object_list.hpp>
+#include <perception_msgs/msg/object_list_with_evidence.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/image.hpp>
 #include <shared_mutex>
@@ -154,9 +154,9 @@ class ImageInstanceSegmentation : public rclcpp::Node {
     rclcpp::Publisher<sensor_msgs::msg::Image>::SharedPtr class_mask_publisher;
     rclcpp::Publisher<sensor_msgs::msg::Image>::SharedPtr instance_mask_publisher;
     rclcpp::Publisher<vision_msgs::msg::Detection2DArray>::SharedPtr detections_publisher;
-    rclcpp::Publisher<perception_msgs::msg::ObjectList>::SharedPtr road_users_publisher;
-    rclcpp::Publisher<perception_msgs::msg::ObjectList>::SharedPtr traffic_lights_publisher;
-    rclcpp::Publisher<perception_msgs::msg::ObjectList>::SharedPtr traffic_signs_publisher;
+    rclcpp::Publisher<perception_msgs::msg::ObjectListWithEvidence>::SharedPtr road_users_publisher;
+    rclcpp::Publisher<perception_msgs::msg::ObjectListWithEvidence>::SharedPtr traffic_lights_publisher;
+    rclcpp::Publisher<perception_msgs::msg::ObjectListWithEvidence>::SharedPtr traffic_signs_publisher;
     rclcpp::CallbackGroup::SharedPtr callback_group;
     std::unique_ptr<ITracker> tracker;
     std::atomic<int> in_flight{0};

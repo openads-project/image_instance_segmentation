@@ -36,9 +36,9 @@ flowchart LR
 | `joinTopic(config.output_prefix, "segmentation/class_mask")` | `sensor_msgs/msg/Image` | `mono16` semantic class IDs; zero is background |
 | `joinTopic(config.output_prefix, "segmentation/instance_mask")` | `sensor_msgs/msg/Image` | `mono16` instance IDs; track IDs when tracking is enabled; zero is background |
 | `joinTopic(config.output_prefix, "segmentation/detections")` | `vision_msgs/msg/Detection2DArray` | Pixel-coordinate boxes, class names, confidence scores, and optional track IDs |
-| `joinTopic(config.output_prefix, "perception/road_users")` | `perception_msgs/msg/ObjectList` | Optional image-only road users (`HEXAMOTION`) with source camera observations |
-| `joinTopic(config.output_prefix, "perception/traffic_lights")` | `perception_msgs/msg/ObjectList` | Optional image-only traffic lights (`TRAFFICLIGHT`) with source camera observations |
-| `joinTopic(config.output_prefix, "perception/traffic_signs")` | `perception_msgs/msg/ObjectList` | Optional image-only traffic signs (`TRAFFICSIGN`) with source camera observations |
+| `joinTopic(config.output_prefix, "perception/road_users")` | `perception_msgs/msg/ObjectListWithEvidence` | Optional image-only road users (`HEXAMOTION`) with source camera evidence |
+| `joinTopic(config.output_prefix, "perception/traffic_lights")` | `perception_msgs/msg/ObjectListWithEvidence` | Optional image-only traffic lights (`TRAFFICLIGHT`) with source camera evidence |
+| `joinTopic(config.output_prefix, "perception/traffic_signs")` | `perception_msgs/msg/ObjectListWithEvidence` | Optional image-only traffic signs (`TRAFFICSIGN`) with source camera evidence |
 
 #### Parameters
 
@@ -81,7 +81,7 @@ flowchart LR
 | `perception.include_masks` | `bool` | `true` | Include binary instance masks in perception objects |
 | `debug.print_timing` | `bool` | `false` | Log inference, postprocessing, and total processing times |
 | `cameras` | `string[]` | `["camera"]` | Names of cameras to process |
-| `sensor_id` | `int` | `1` | Non-negative camera identifier in perception observations |
+| `sensor_id` | `int` | `1` | Non-negative camera identifier in perception evidence |
 | `image_topic` | `string` | `"~/image"` | Raw image base topic |
 | `transport` | `string` | `"raw"` | Image transport hint: raw or compressed |
 | `output_prefix` | `string` | `"~"` | Prefix for this camera's output topics |

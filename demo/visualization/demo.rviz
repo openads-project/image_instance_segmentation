@@ -4,7 +4,7 @@ Panels:
 Visualization Manager:
   Class: ""
   Displays:
-    - Class: perception_msgs/ImageObservations
+    - Class: perception_msgs/ImageEvidence
       Enabled: true
       Name: Road users
       Topic:
@@ -28,7 +28,7 @@ Visualization Manager:
         Value: true
         Format: "{id} {class} {class_prob}"
         Font Size: 14
-    - Class: perception_msgs/ImageObservations
+    - Class: perception_msgs/ImageEvidence
       Enabled: true
       Name: Traffic signs
       Topic:
@@ -46,7 +46,7 @@ Visualization Manager:
       Label:
         Value: true
         Format: "{id} sign {exist}"
-    - Class: perception_msgs/ImageObservations
+    - Class: perception_msgs/ImageEvidence
       Enabled: true
       Name: Traffic lights
       Topic:

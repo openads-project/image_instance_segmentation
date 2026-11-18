@@ -10,7 +10,7 @@ List camera names in `cameras` and configure each under `camera.<name>`:
 
 | Parameter | Meaning |
 | --- | --- |
-| `camera.<name>.sensor_id` | Unique camera ID for perception observations; defaults to its 1-based position in `cameras` |
+| `camera.<name>.sensor_id` | Unique camera ID for perception evidence; defaults to its 1-based position in `cameras` |
 | `camera.<name>.image_topic` | Base image topic |
 | `camera.<name>.transport` | `raw` or `compressed`; omit `/compressed` from the base topic |
 | `camera.<name>.output_prefix` | Prefix for camera output topics |
@@ -51,7 +51,7 @@ perception.publish_traffic_signs: true
 
 Topics are `perception/road_users`, `perception/traffic_lights` and
 `perception/traffic_signs` under each camera's output prefix. They carry
-`perception_msgs/msg/ObjectList` with `HEXAMOTION`, `TRAFFICLIGHT` and `TRAFFICSIGN`
+`perception_msgs/msg/ObjectListWithEvidence` with `HEXAMOTION`, `TRAFFICLIGHT` and `TRAFFICSIGN`
 states respectively. Metric components remain unmeasured; light state, sign type
 and road-user light states remain unknown.
 
@@ -61,7 +61,7 @@ Object IDs persist for a tracked object's lifetime and are not recycled when
 mask IDs are reused. Without tracking, each published detection gets a
 fresh ID. IDs are scoped to a camera stream and node lifetime.
 
-Observations retain source coordinates and headers. `perception.include_crops`
+Image evidence retains source coordinates and headers. `perception.include_crops`
 and `perception.include_masks` independently include BGR crops and binary `mono8`
 ROI masks. Pixels are prepared only for subscribed outputs; empty lists are
 published for processed frames without matching detections.
@@ -106,8 +106,8 @@ at the admission limit. Set `prediction.max_in_flight_per_camera: 1` for low
 latency; tracking enforces this limit to preserve frame order.
 
 Enable `debug.print_timing` for processing times. To inspect results, enable
-the `perception.publish_*` object lists and view their image observations with
-the `perception_msgs/ImageObservations` RViz display from
+the `perception.publish_*` object lists and view their image evidence with
+the `perception_msgs/ImageEvidence` RViz display from
 [perception_interfaces](https://github.com/ika-rwth-aachen/perception_interfaces).
 Use `ros_tracing:=true` to enable OpenADS dual-session tracing. Service images
 include the `jazzy-ika` tracing fork.
